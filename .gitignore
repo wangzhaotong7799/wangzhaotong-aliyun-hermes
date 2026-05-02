@@ -1,0 +1,66 @@
+# 敏感信息（绝不上传真实密钥）
+.env
+.env.backup
+hermes_config/.env
+hermes_config/.env.backup
+auth.json
+hermes_config/auth.json
+hermes_config/*.backup
+
+# 虚拟环境
+venv/
+.venv/
+__pycache__/
+*.egg-info/
+
+# 运行时数据库
+state.db*
+response_store.db*
+kanban.db
+
+# 本地历史
+.hermes_history
+
+# 缓存
+cache/
+image_cache/
+images/
+audio_cache/
+*.cache.json
+
+# 日志
+logs/
+*.log
+
+# 运行时锁文件
+gateway.lock
+gateway.pid
+*.lock
+
+# 临时文件
+sandboxes/
+pastes/
+hooks/
+pairing/
+
+# 其他运行时
+feishu_seen_message_ids.json
+.panel_last_session.json
+.update_check
+
+# 备份文件
+*.backup
+
+# 技能运行时缓存
+.skills_prompt_snapshot.json
+.bundled_manifest
+.curator_state
+.hub/
+.usage.json
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~

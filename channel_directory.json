@@ -1,0 +1,38 @@
+{
+  "updated_at": "2026-05-02T16:18:43.121436",
+  "platforms": {
+    "telegram": [],
+    "discord": [],
+    "whatsapp": [],
+    "slack": [],
+    "signal": [],
+    "mattermost": [],
+    "matrix": [],
+    "homeassistant": [],
+    "email": [],
+    "sms": [],
+    "dingtalk": [],
+    "feishu": [
+      {
+        "id": "oc_10d032f2e5b7b86d660945627d981888",
+        "name": "oc_10d032f2e5b7b86d660945627d981888",
+        "type": "dm",
+        "thread_id": null
+      },
+      {
+        "id": "oc_9f433716bb8afe94566f177089e4f8f7",
+        "name": "用户657799",
+        "type": "group",
+        "thread_id": null
+      }
+    ],
+    "wecom": [],
+    "wecom_callback": [],
+    "weixin": [],
+    "bluebubbles": [],
+    "qqbot": [],
+    "yuanbao": [],
+    "irc": [],
+    "teams": []
+  }
+}
