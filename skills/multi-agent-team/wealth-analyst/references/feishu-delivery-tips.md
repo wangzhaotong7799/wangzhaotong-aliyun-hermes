@@ -44,9 +44,13 @@
 
 ## 目标 chat_id
 
-```
-feishu:oc_99961a56e530e89f7e369cd6ecb50218
-```
+chat_id 不应硬编码在技能文件中。应从以下来源获取（按优先级）：
+1. Cron prompt 中明确指定
+2. 用户记忆（memory）中存储的 chat_id
+3. 当前 cron job 的 `deliver` 配置目标
+
+当前用户私聊 chat_id（存放于 memory）：
+- `oc_10d032f2e5b7b86d660945627d981888` — 用户飞书 DM
 
 ---
 
@@ -54,19 +58,37 @@ feishu:oc_99961a56e530e89f7e369cd6ecb50218
 
 `send_message` 的 `MEDIA:` 语法**不支持飞书**（仅支持 telegram/discord/matrix/weixin/signal/yuanbao）。
 
-飞书发文件需要用 Open API 分两步走：
+飞书发文件需要用 Open API 分两步走：先上传文件获取 file_key，再发送文件消息。
 
 ### 脚本方式（推荐）
 
 使用 `scripts/md_to_feishu_docx.py` 一键完成：
 
 ```bash
-python3 ~/.hermes/skills/multi-agent-team/wealth-analyst/scripts/md_to_feishu_docx.py \
+# 注意：必须使用 Hermes venv 的 Python，不是系统 Python
+/root/.hermes/hermes-agent/venv/bin/python3 ~/.hermes/skills/multi-agent-team/wealth-analyst/scripts/md_to_feishu_docx.py \
   "data/report_202605.md" \
-  "oc_99961a56e530e89f7e369cd6ecb50218"
+  "<飞书聊天ID>"
 ```
 
 脚本自动完成：MD→DOCX 转换 → 上传飞书 → 发送文件消息。
+
+### Cron 交付工作流
+
+Cron 任务完成报告后，需要**两个步骤**才能完整交付，缺一不可：
+
+1. **摘要消息文本**: 由 `send_message` 发送（通过 cron job 的 `deliver` 参数自动处理）
+2. **Word 文档文件**: 手动调用 `md_to_feishu_docx.py` 脚本上传并发送
+
+Cron prompt 必须明确写明脚本调用的 chat_id 参数，示例如下：
+
+```
+飞书交付方式：
+1. 先用 send_message 发送摘要消息到飞书（已配置 deliver）
+2. 再运行脚本发送 Word 文档：
+   /root/.hermes/hermes-agent/venv/bin/python3 ~/.hermes/skills/multi-agent-team/wealth-analyst/scripts/md_to_feishu_docx.py data/report_YYYYMM.md oc_10d032f2e5b7b86d660945627d981888
+   注意：CHAT_ID 参数必须使用正确的 chat_id，不要用脚本默认值
+```
 
 ### 手动 API 方式
 

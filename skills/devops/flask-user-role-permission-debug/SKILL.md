@@ -210,6 +210,8 @@ page_size = request.args.get('per_page', type=int) or request.args.get('page_siz
 
 ## 问题 4: `permissions` 表为空导致 `@permission_required` 返回 403
 
+> **吸收自 `flask-permission-empty-tables`**（2026-05 合并）— 补充了装饰器源码级的检查机制说明。
+
 ### 现象
 
 所有用户（包括 admin）访问带有 `@permission_required('user:read')` 装饰器的 API（如 `/api/auth/users`）都返回 403 `权限不足`。**这与 `user_roles` 为空的表现不同**——登录后 JWT 中的 roles 正常返回（比如 `['admin']`），但具体 API 仍然 403。
@@ -220,12 +222,35 @@ GET /api/auth/users 403 (FORBIDDEN)
 fetchWithAuth @ common.js:79
 ```
 
+### `@permission_required` 如何检查
+
+`@permission_required` 是**数据库运行时检查**，不是静态角色名检查。它调用 `check_permission(g.user_id, permission_name)` 实时查数据库：
+
+```python
+def check_permission(user_id, permission_name):
+    user = db.session.query(User).options(
+        joinedload(User.roles).joinedload(Role.permissions)
+    ).filter_by(id=user_id).first()
+    for role in user.roles:
+        for perm in role.permissions:
+            if perm.name == permission_name:
+                return True
+    return False  # Permission 表为空时总是返回 False！
+```
+
+当以下情况发生时，所有权限检查都会失败：
+1. `Permission` 表通过 `create_all()` 创建但**从未填充数据**
+2. `role_permissions` 关联表存在但**没有关联记录**
+3. 从 V1（无 RBAC）迁移到 V2（有 `@permission_required`）时遗漏了播种脚本
+
 ### 与问题 1 (`user_roles` 为空) 的对比
 
 | 问题 | 表现 | 原因 |
 |------|------|------|
 | `user_roles` 为空 | 登录后 roles=`[]`，前端导航消失 | JWT 直接存了 roles 列表（登录时从 user_roles 表查），空列表就无权限 |
 | `permissions` 为空 | 登录后有 roles，但 `@permission_required` API 返回 403 | 装饰器实时查数据库 `check_permission()`，找不到权限记录 |
+
+**关键区别**：`g.roles` (JWT token) 来自 Token payload，24h 有效期；`check_permission()` 来自 Permission 表 + role_permissions 关联，持久化在 DB。`@permission_required` 使用后者，所以 **Permission 表和关联必须有数据** 才能工作。这与前端角色显示（从 localStorage 的 roles 字段读取）是完全不同的机制。
 
 **关键诊断线索：** 如果 admin 登录后能看到导航栏（表示 roles 非空），但 `/api/auth/users` 仍返回 403，那 90% 是 permissions 表的问题，而不是 user_roles。
 
@@ -367,3 +392,28 @@ window.pageLoaders['admin-users'] = function() {
 2. **迁移脚本必须包含关联表** — SQLite→PostgreSQL 迁移时，`user_roles` 是独立表
 3. **登录后立即验证 `roles`** — 前端打印 `console.log('roles:', data.roles)` 确认非空
 4. **API 参数名统一** — 全项目统一用 `per_page` 或 `page_size`，不要混用
+5. **权限播种脚本** — 在首次部署时运行以下脚本确保 Permission 表有数据：
+
+```python
+def seed_permissions():
+    with app.app_context():
+        session = db.session
+        if session.query(Permission).count() > 0:
+            return  # 已播种
+        
+        perms = [Permission(name=n, description=d) for n, d in [
+            ('user:read', '查看用户'), ('user:create', '创建用户'),
+            ('user:update', '更新用户'), ('user:delete', '删除用户'),
+            ('role:read', '查看角色'), ('role:create', '创建角色'),
+            ('role:update', '更新角色'), ('role:delete', '删除角色'),
+        ]]
+        session.add_all(perms)
+        session.flush()
+        
+        admin_role = session.query(Role).filter_by(name='admin').first()
+        if admin_role:
+            admin_role.permissions.extend(perms)
+            session.commit()
+```
+
+在 `app.py` 的 `create_app()` 末尾调用 `seed_permissions()`。

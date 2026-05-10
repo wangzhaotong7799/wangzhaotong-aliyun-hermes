@@ -89,6 +89,7 @@ curl -s -X POST "https://api.exa.ai/search" \
 | 视频号 | 行业报道中的热门内容 | web_search 行业分析文章 |
 | 快手 | 快手热榜 | web_extract |
 | TikTok | TikTok Trending | web_search 新闻/行业报道（Tavily 实时性优势） |
+| **闲鱼** | **商品分类结构、二手/闲置趋势** | **⚠️ 仅能提取分类框架+首页推荐，不能获取实时商品数据和"想要数"（JS动态渲染）** |
 
 采集字段：标题、播放量/互动量、创作者、发布时间、3-5个热门作品示例
 

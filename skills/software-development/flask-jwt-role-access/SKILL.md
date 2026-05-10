@@ -362,6 +362,57 @@ for (var i = 0; i < fields.length; i++) {
 }
 ```
 
+### ⚠️ 前端搜索/筛选参数不应按登录态全量封锁
+
+**问题：** 在桌面版 `page-prescriptions.js` 中，搜索参数（姓名、代煎号、医助、医生、日期）全部被包裹在 `if (isLoggedIn) { }` 块内。未登录用户虽然能看到搜索框，但选了任何条件点搜索，参数都不传给 API，等于白点。
+
+```javascript
+// ❌ 错误：未登录用户所有搜索参数全被屏蔽
+if (isLoggedIn) {
+    const searchName = document.getElementById('search-name').value;
+    const assistant = document.getElementById('filter-assistant').value;
+    const startDate = document.getElementById('start-date').value;
+    // ... 这些参数只有登录用户才能发送
+}
+```
+
+**现象：**
+- 搜索框显示正常（CSS 无隐藏）
+- 选择医助/姓名 → 点搜索 → 页面刷新 → 结果没变
+- 用户感觉控件是「灰色用不了」
+
+**修复原则：** 搜索/筛选权限与数据查看权限是两码事。一个未登录用户如果能看到数据，就应该能在这批数据内搜索。
+
+**正确做法：** 按具体字段的敏感度分级授权，而非一刀切
+
+```javascript
+// ✅ 正确：按字段分级，未登录用户仅开放非敏感搜索
+if (isLoggedIn) {
+    // 登录用户：全部字段可用
+    const searchName = document.getElementById('search-name').value;
+    const searchPrescriptionId = document.getElementById('search-prescription-id').value;
+    const assistant = document.getElementById('filter-assistant').value;
+    const startDate = document.getElementById('start-date').value;
+    const endDate = document.getElementById('end-date').value;
+
+    if (assistant) params.append('assistant', assistant);
+    if (searchName) params.append('patient_name', searchName);
+    if (searchPrescriptionId) params.append('prescription_id', searchPrescriptionId);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+} else {
+    // 未登录用户：仅开放非敏感的医助/姓名→拼音搜索
+    const assistant = document.getElementById('filter-assistant').value;
+    if (assistant) params.append('assistant', assistant);
+}
+```
+
+**注意事项：**
+- 去掉 `if (isLoggedIn)` 包住全部参数的做法可能导致页面空白，原因是 API 在无认证状态下可能返回不期望的响应（取决于后端是否要求 auth header）。**要逐个字段开放，而非批量移除。**
+- 开放给未登录用户的筛选参数，后端必须也能正确处理（即不需要 JWT 也能执行该过滤逻辑）
+- 日期范围、医生等更敏感的筛选条件建议保留给登录用户
+- 修改后务必用浏览器无痕窗口测试未登录状态
+
 ### ⚠️ 后端是唯一安全屏障
 
 前端 UI 隐藏只是用户体验优化，**真正的权限检查必须在后端做**。攻击者可以直接 curl 调用 API，绕过前端限制。本例中后端所有相关端点都做了角色检查（返回 403）。

@@ -165,6 +165,7 @@ pip3 install bcrypt passlib pyjwt
 - CentOS/AlmaLinux 8 自带 Python 3.6.8，需特别注意包版本兼容性
 - 使用 `--user` 参数或虚拟环境避免系统 Python 污染
 - bcrypt 3.2.2 是最后一个支持 Python 3.6 的版本
+- PostgreSQL 环境请参考 `references/postgresql-health-check.md` 进行数据库连接诊断
 
 ---
 

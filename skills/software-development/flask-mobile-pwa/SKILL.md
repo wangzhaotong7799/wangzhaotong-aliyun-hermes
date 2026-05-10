@@ -340,7 +340,31 @@ return [
 
 **什么时候用续行模式还行：** 一次性写好不再改动的静态模板。如果预期未来会频繁调整字段，一开始就用数组 Join 模式。
 
-### 陷阱 8：多页面字段定制不同步
+### 陷阱 10：Service Worker 缓存导致静态文件更新不生效
+
+**问题：** 更新了 `pinyin-util.js`、`page-pickup.js` 或其他前端文件后，用户刷新 PWA 但改动不生效。开发者用 curl 验证服务端文件已更新，但用户浏览器始终看到旧版本。
+
+**根因：** Service Worker 的 `cache-first` 策略（`caches.match(event.request).then((cached) => cached || fetch(event.request))`）让浏览器**根本不发网络请求**，直接从本地缓存服务。即使服务端文件内容已变，用户也看不到新版本。
+
+**修复方法：**
+
+1. **更新 `sw.js` 的缓存版本号**（推荐 +1 递增）：
+   ```javascript
+   const CACHE_NAME = 'gaofang-mobile-v1';  // → v2 → v3
+   ```
+   activate 事件会自动清理旧版缓存。
+
+2. **`sw.js` 自身禁止 HTTP 缓存**（参考 Flask 示例）：
+   ```python
+   if path.endswith('sw.js'):
+       resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+   ```
+
+3. **告知用户关闭 PWA 重新打开**（刷新页面不够，要完全关标签页）。
+
+**防御措施：**
+- 每次改前端文件，顺手检查 `sw.js` 版本号是否需递增
+- 开发阶段可临时在浏览器中 Unregister SW（DevTools → Application → Service Workers → Unregister）
 
 **问题：** 当有 3 个 PWA 页面（pickup / followup / reminders）时，同一个字段（如「医助」「医生」「剂型」）需要在多个页面的卡片列表或弹窗中统一显示/隐藏。容易遗漏。
 
@@ -360,6 +384,90 @@ grep -n -i 'doctor\\|医生\\|assistant\\|医助\\|prescription_type\\|剂型' s
 **建议：** 如果 3 个页面都用同一个字段列表配置模式（而非各自硬编码 HTML 模板），后续改字段只需要改一处。但本 PWA 架构中每个页面独立维护自己的卡片 HTML，所以改字段必须逐一排查。
 
 ---
+
+---
+
+### 陷阱 9：客户端过滤与分页不兼容
+
+**问题：** PWA 从 API 拉取一页数据（如 50 条），然后在 JavaScript 端根据筛选标签（未取/已取/欠药）对这批数据做客户端过滤。这会导致：
+
+- **已取数据永远不显示**：如果第一页（按 id DESC 排序的最新 50 条）全是「欠药」和「未取」，用客户端过滤永远找不到「已取」记录，因为已取数据都在更早的页面上。
+- **未取数量不准确**：默认只加载第一页，未取数据只包含这一页内的，不是实际总数。
+- **用户点「加载更多」累积了多页后，计数依然不对**：因为客户端只拿到了部分数据，全量数据需要几十次翻页。
+
+**典型场景（膏方系统 V2 PWA）：**
+
+数据库真实数据：未取 12 条，已取 3176 条，欠药 55 条  
+PWA 第一页 API 返回（每页 50 条，按 id DESC）：欠药 47 条 + 未取 3 条，已取 0 条  
+用户点「已取」筛选 → 客户端过滤 → 0 条匹配 → 显示「暂无处方记录」  
+用户点「未取」筛选 → 显示 3 条（实际应有 12 条）
+
+**根因分析：**
+```
+PWA 模式                    vs      正确模式（服务端过滤）
+━━━━━━━━━━━━━━━━━━━━━━             ━━━━━━━━━━━━━━━━━━━━━━
+API 返回第 1 页 50 条 (全部状态)    API 返回第 1 页 50 条 (已取)
+客户端从 50 条中找「已取」→ 0 条   服务端从 3176 条中查 → 50 条
+结果：「暂无处方记录」               结果：显示已有记录
+```
+
+**修复方案：**
+
+```javascript
+// ❌ 错误：客户端过滤 + 分页（默认加载第 1 页 50 条，然后客户端 filter）
+Api.getPrescriptions({ page: 1, per_page: 50, start_date: startDate })
+  .then(function(resp) {
+    state.allData = resp.data;      // 只有 50 条
+    // 然后客户端过滤 state.allData.filter(item => item.status === filter)
+  });
+
+// ✅ 正确：将 status 参数传给服务端，服务端过滤
+function fetchPage(status, page) {
+  var params = { page: page, per_page: 50, start_date: startDate };
+  if (status && status !== '全部') {
+    params.status = status;    // ← 关键：让服务端做筛选
+  }
+  Api.getPrescriptions(params).then(function(resp) {
+    state.allData = state.allData.concat(resp.data);  // 全部是筛选后的结果
+    renderList();   // 直接渲染，不需要再客户端过滤
+  });
+}
+
+// 切换筛选标签时 → 重新从第 1 页加载（带上新的 status 参数）
+function switchFilter(newFilter) {
+  state.allData = [];
+  state.page = 1;
+  fetchPage(newFilter, 1);
+}
+```
+
+**何时可以用客户端过滤？**
+- 数据量很小且固定（几十条）且全部一次性加载完毕
+- 数据不带 pagination，一次性返回全部
+
+**何时必须用服务端过滤？**
+- 数据量超过一页（几十条以上）
+- 使用了分页加载（page + per_page）
+- 筛选结果分布在不同页面上（如已取数据多数在早期页）
+
+**诊断方法：**
+
+```bash
+# 1. 看 API 调用是否带了 status 参数
+curl -s "http://localhost:8080/api/prescriptions?page=1&per_page=50" 2>/dev/null \
+  | python3 -c "import json,sys; data=json.load(sys.stdin); s={}; [s.__setitem__(i.get('status','?'),s.get(i.get('status','?'),0)+1) for i in data.get('data',[])]; print(s)"
+
+# 2. 对比带 status 参数的 API 调用
+curl -s "http://localhost:8080/api/prescriptions?status=%E5%B7%B2%E5%8F%96&page=1&per_page=1" \
+  | python3 -c "import json,sys; data=json.load(sys.stdin); print(f'已取 total={data.get(\"total\",\"?\")}')"
+  
+# 3. 如果两个 total 不一样 → 后端支持服务端过滤，前端应该用
+```
+
+**防御措施：**
+- PWA 开发阶段，每个筛选标签都先问：这个筛选是客户端做还是服务端做？
+- 默认优先服务端过滤（API 支持的话），客户端过滤只用于一次性全量数据的简单搜索
+- 分页 + 筛选的组合场景，永远走服务端
 
 ### 陷阱 5：API 参数名/value 前后端不匹配
 
@@ -534,6 +642,14 @@ gunicorn --bind 0.0.0.0:8080 --reuse-port --workers 2 --threads 2 --timeout 120 
 
 ---
 
+## 客户端过滤与服务端过滤陷阱
+
+详见独立参考文档: `references/pwa-client-filter-vs-server-filter.md`
+
+该文档覆盖以下场景：PWA 使用客户端过滤 + 分页加载时，筛选结果不准确（如「已取」数据永远不显示）。提供复现步骤、修复方案和防御措施。
+
+---
+
 ## 详情弹窗内联编辑模式
 
 详见独立参考文档: `references/inline-edit-pattern.md`
@@ -549,6 +665,12 @@ gunicorn --bind 0.0.0.0:8080 --reuse-port --workers 2 --threads 2 --timeout 120 
 
 详见独立参考文档: `references/assistant-edit-pattern.md`
 
+## 数据合计数量栏
+
+详见独立参考文档: `references/data-count-summary.md`
+
+该文档覆盖以下场景的完整实现：PWA 列表页在筛选标签下方显示当前状态/搜索条件下的数据条数，包含服务端总数与本地过滤数的区分逻辑。
+
 该文档覆盖「下拉框选择 + 新增输入」双模式编辑的完整实现：
 
 1. **下拉框加载数据** — 从 `GET /api/assistants` 动态加载选项，当前值自动高亮
@@ -560,6 +682,22 @@ gunicorn --bind 0.0.0.0:8080 --reuse-port --workers 2 --threads 2 --timeout 120 
 ## 客户端搜索扩展
 
 当需要在 PWA 的客户端搜索过滤中添加新字段时，三步完成：
+
+### 拼音首字母模糊搜索
+
+**需求**: 医助输入 `jsj` 即可搜索到「姜树杰」，无需完整输入汉字。
+
+**推荐方案**: 轻量级本地字典映射（零外部依赖），详见 `references/pinyin-search.md`。
+
+关键要点：
+- 在 `index.html` 中先加载 `pinyin-util.js`，再加载页面模块
+- **优先选择**：从数据库所有患者姓名字段中提取唯一字符，用后端 `pypinyin` 库批量生成映射（见生成脚本 `scripts/gen-pinyin-map.py`），覆盖度远高于手写字典
+  - 最新版本支持**自动直连数据库**（`PGPASSWORD=xxx python3 gen-pinyin-map.py --write /path/to/pinyin-util.js`），无需手动粘贴
+  - 运行后自动验证映射结果与已知患者姓名是否匹配
+- 手写字典必然遗漏生僻字（如「姜」「树」不在常见字表里），导致搜索漏人 —— **一定要从数据库实际数据生成**
+- 使用 `indexOf` 而非精确匹配，支持部分字母输入（如 `z` 匹配所有 z 开头的姓）
+- 映射表只覆盖数据库中的汉字；如遇生僻字，可补充字典或回退后端 API
+- **重要**：生成后必须验证。输入几个已知患者姓名（如「姜树华」）确认拼音首字母正确再部署。
 
 ### 第一步：修改搜索函数
 

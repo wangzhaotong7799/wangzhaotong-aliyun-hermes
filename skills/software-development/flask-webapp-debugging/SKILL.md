@@ -126,6 +126,8 @@ ls path/to/project/static/*.html
 2. **多文件副本**：静态文件可能在多个位置存在副本，需全部更新
 3. **浏览器缓存**：HTML/CSS/JS 修改后需要强制刷新 (Ctrl+F5)
 4. **时间计算错误**：前端时间和后端时间的解析可能不一致
+5. **Gunicorn 进程缓存静态文件**：修改 `static/js/` 或 `static/css/` 后，Flask 开发服务器自动刷新，但 **gunicorn 需要 restart** 才能加载新文件。修改完后 `systemctl restart your-service`，否则 curl 看到的是旧内容。测试时不要只看本地文件，要用 `curl SERVER_URL/static/js/xxx.js` 确认线上版本。
+6. **双层登录门控（搜索控件被禁 + 搜索参数被锁）**：这是一个常见但容易漏掉的模式。表单控件可能在 HTML/JS 中被 `disabled`，同时 JS 的搜索参数也被 `if (isLoggedIn)` 包裹。修复时必须同时解除两把锁：\n   - **第一层（DOM 禁用）**：`pageLoaders` 或 `DOMContentLoaded` 里的 `el.disabled = !isLoggedIn` 循环\n   - **第二层（参数封锁）**：`loadPrescriptions()` 或搜索函数里的 `if (isLoggedIn) { ... 读取搜索参数 ... }`\n   - **注意：不要一刀切全放开**。把全部搜索参数移出 `if (isLoggedIn)` 可能导致未登录用户看到异常数据（如日期范围过滤错误）。应当**选择性开放**：仅把需要的参数（如 `assistant`）移出，其余参数保持原样。即登录用户走完整逻辑，未登录用户只走精简分支。\n   - 排查步骤：\n     1. 检查页面加载器（`pageLoaders['xxx']` 或 `DOMContentLoaded`）里是否有禁用控件的代码\n     2. 检查搜索/筛选函数里搜索参数是否被 `isLoggedIn` 包裹\n     3. 用 `curl 'API_URL?assistant=xxx'` 单独验证后端 API 是否支持未登录请求\n     4. 如需选择性开放（如仅开放医助搜索），从禁用列表里移除该控件 ID + 在 else 分支加对应参数
 
 ### 调试口诀
 - 先看 API 再看页
@@ -133,6 +135,8 @@ ls path/to/project/static/*.html
 - 追逻辑查默认
 - 修多处要同步
 - 清缓存再验证
+- 改静态需重启
+- 双锁控要两端解
 
 ## 参考案例
 

@@ -90,6 +90,46 @@ WARNING gateway.run: No user allowlists configured. All unauthorized users will 
 
 **Understanding the issue**: Even with successful pairing, users need explicit authorization to interact with the gateway. This is a security feature.
 
+**Sub-issue 1a: New group member silently ignored (no log warning)**
+
+**Symptom**: A new user is added to an existing group chat that already contains the bot. The new user sends messages but the bot never responds. **Unlike DM scenarios, no "Unauthorized user" warning appears in the logs** — the gateway silently drops the message at the platform layer before it reaches the log filter.
+
+**Diagnosis**:
+```bash
+# 1. Check the allowlist — does it include this user?
+cat ~/.hermes/.env | grep FEISHU_ALLOWED_USERS
+# If this only lists the original user(s), the new member is blocked
+
+# 2. Search logs for any trace of the new user's messages
+grep "sender=user:" ~/.hermes/logs/gateway.log | grep -v "ou_b13ee47717bdd2c2627dcdd08c8dda05" | tail -10
+# If no results, the messages are being silently dropped before logging
+```
+
+**Root cause**: The `FEISHU_ALLOWED_USERS` filter runs at the platform layer inside the gateway. When a message arrives from an unallowed user in a group, the gateway acknowledges the webhook event (to avoid retries) but *never passes it to the processing pipeline* — hence no log entry or warning. DMs from unallowed users may produce a log warning, but **group messages are completely silent**.
+
+**Fix**: Get the new user's Feishu open_id (see "How to get a user's open_id" below) and add it to `FEISHU_ALLOWED_USERS`.
+
+**How to get a new user's open_id**:
+1. **Best approach**: Ask the user to send a DM to the bot. Even though it will be rejected, check the gateway log for the rejection entry that includes their open_id:
+   ```bash
+   tail -20 ~/.hermes/logs/gateway.log | grep "Unauthorized user"
+   ```
+   If logging is configured for unauthorized DMs, the open_id will appear there.
+
+2. **Fallback**: Check Feishu Admin Console → Members → find the user → view their profile. The open_id is typically shown in member details or can be retrieved via the Feishu Open API contact query endpoint.
+
+3. **Last resort**: Temporarily set `GATEWAY_ALLOW_ALL_USERS=true` in `.env`, restart the gateway, have the user send one message, capture their open_id from the log, then revert to per-user allowlisting:
+   ```bash
+   # After getting the message logged, grep for the new sender
+   grep "sender=user:" ~/.hermes/logs/gateway.log | tail -5
+   # Update .env to add the new open_id
+   sed -i 's/FEISHU_ALLOWED_USERS=ou_old/FEISHU_ALLOWED_USERS=ou_old,ou_new/' ~/.hermes/.env
+   # Remove GATEWAY_ALLOW_ALL_USERS and restart
+   sed -i '/GATEWAY_ALLOW_ALL_USERS/d' ~/.hermes/.env
+   hermes gateway restart
+   ```
+   ⚠️ **Risk**: While `GATEWAY_ALLOW_ALL_USERS=true` is active, ANY user in any group can interact with the bot. Gate this operation tightly — it should only be open for seconds, not minutes.
+
 **Solution**: Configure user authorization:
 
 1. **Option A (Recommended)**: Add specific user to allowlist in `.env`:
@@ -414,6 +454,7 @@ Start → Check pairing file → Exists? → No → Need new pairing code
 ## Reference Files
 
 - `references/credential-loss-sigkill-recovery.md` — Full diagnostic walkthrough of a real incident where the gateway was killed by SIGKILL and Feishu credentials were lost from `.env`. Useful as a concrete pattern to follow when investigating "Feishu not working".
+- `references/group-member-silently-ignored.md` — Walkthrough of diagnosing a new group member whose messages were silently dropped by the allowlist filter. Covers the key insight: group messages from unallowed users produce no log warning, unlike DMs.
 
 ## Related Skills
 

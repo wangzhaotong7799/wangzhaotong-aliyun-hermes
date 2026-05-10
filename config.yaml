@@ -301,7 +301,7 @@ memory:
   user_profile_enabled: true
   memory_char_limit: 2200
   user_char_limit: 1375
-  provider: ''
+  provider: holographic
   nudge_interval: 10
   flush_min_turns: 6
 delegation:
@@ -361,26 +361,28 @@ approvals:
   cron_mode: deny
   mcp_reload_confirm: true
 command_allowlist:
-- stop/restart system service
 - SQL DROP
-- script execution via heredoc
-- find -delete
 - pipe remote content to shell
-- script execution via -e/-c flag
-- in-place edit of system config
 - overwrite system file via redirection
-- git force push (rewrites remote history)
+- git reset --hard (destroys uncommitted changes)
 - overwrite project env/config via redirection
-- force kill processes
-- hermes update (restarts gateway, kills running agents)
-- overwrite system config
-- kill process via pgrep expansion (self-termination)
-- recursive delete
 - stop/restart hermes gateway (kills running agents)
-- SQL TRUNCATE
+- stop/restart system service
 - copy/move file into /etc/
 - delete in root path
+- SQL TRUNCATE
+- overwrite system config
+- script execution via heredoc
+- kill process via pgrep expansion (self-termination)
+- git clean with force (deletes untracked files)
+- script execution via -e/-c flag
+- force kill processes
+- in-place edit of system config
+- hermes update (restarts gateway, kills running agents)
+- git force push (rewrites remote history)
 - overwrite project env/config file
+- recursive delete
+- find -delete
 quick_commands: {}
 hooks: {}
 hooks_auto_accept: false
@@ -414,7 +416,10 @@ model_catalog:
   enabled: true
   url: https://hermes-agent.nousresearch.com/docs/api/model-catalog.json
   ttl_hours: 24
-  providers: {}
+  providers:
+    deepseek:
+      models:
+      - deepseek-v4-flash
 network:
   force_ipv4: false
 sessions:
@@ -560,6 +565,9 @@ custom_providers:
 platforms:
   feishu: {}
 FEISHU_HOME_CHANNEL: oc_10d032f2e5b7b86d660945627d981888
+plugins:
+  enabled:
+  - rtk-rewrite
 
 # ── Fallback Model ────────────────────────────────────────────────────
 # Automatic provider failover when primary is unavailable.

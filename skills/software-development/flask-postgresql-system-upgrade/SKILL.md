@@ -480,11 +480,153 @@ todo(todos=[
 | 问题 | 表现 | 解决方案 |
 |------|------|----------|
 | 外键约束失败 | `FOREIGN KEY CONSTRAINT VIOLATED` | 使用 ID 映射，先迁移主表再关联表 |
-| 序列未重置 | `duplicate key value` | `ALTER SEQUENCE xxx RESTART WITH 1` |
+| 序列未重置 | `duplicate key value` | 见下方「序列同步与ID重编号」完整流程 |
 | 时区问题 | 时间偏差 8 小时 | PostgreSQL 统一使用 UTC |
 | DECIMAL 精度丢失 | 金额显示错误 | SQLite DECIMAL→PostgreSQL NUMERIC(n,m) |
 | NULL 处理差异 | 查询结果不一致 | SQLite 的空字符串 vs NULL 需统一 |
 | **API 字段不一致** | **部分端点缺失字段导致前端显示 `-`** | **遍历所有蓝图对比返回字典结构** |
+| **日期函数兼容性** | `NameError: case` 或 SQL 语法错误 | 见下方「统计查询与日期处理」章节 |
+
+## 统计查询与日期处理
+
+> **吸收自 `flask-postgresql-statistical-query`**（2026-05 合并）
+
+### PostgreSQL 日期函数选择
+
+使用 `func.to_char()` 而非 `func.strftime()`：
+
+```python
+from sqlalchemy import func
+
+# ✅ 正确（PostgreSQL 原生）
+func.to_char(PrescriptionRecord.pickup_date, 'YYYY').label('year')
+func.to_char(PrescriptionRecord.pickup_date, 'MM').label('month')
+
+# ❌ 错误（SQLite 兼容函数，PostgreSQL 不可靠）
+func.strftime('%Y', cast(col, Date))
+```
+
+### Case When 语法（Python 3.6 + SQLAlchemy 1.4）
+
+```python
+from sqlalchemy import func, case
+
+# ✅ 列表式语法兼容 Python 3.6
+func.sum(case([(status == '已回访', 1)], else_=0)).label('visited')
+
+# ❌ 位置参数语法在 SQLAlchemy 1.4 上崩溃
+case((cond, val), else_=0)  # TypeError
+```
+
+### 填充缺失月份
+
+```python
+final_results = []
+for month_idx in range(1, 13):
+    existing = next((r for r in results if r['month_num'] == month_idx), None)
+    final_results.append(existing or {
+        'month': f'{year}-{month_idx:02d}', 'total': 0, ...
+    })
+```
+
+### 性能优化
+
+```sql
+-- 复合索引覆盖常用统计查询
+CREATE INDEX idx_records_status_date ON prescription_records(status, pickup_date);
+CREATE INDEX idx_records_status_followup ON prescription_records(follow_up_status, pickup_date);
+```
+
+完整统计查询 API 模板见原 `flask-postgresql-statistical-query` 存档。
+
+### ⭐ PostgreSQL 自增序列同步与 ID 重编号（迁移后修复）
+
+**典型场景**: SQLite/旧系统数据迁移到 PostgreSQL 后，`SERIAL`/`IDENTITY` 自增序列的值远小于已存在的 `MAX(id)`，导致新插入的记录获得比旧数据更低的 ID。按 `id DESC` 排序时，旧数据反而排在前面。
+
+**诊断方法**:
+```sql
+-- 检查 ID 范围与序列值的差距
+SELECT 
+  MIN(id) AS min_id,
+  MAX(id) AS max_id,
+  COUNT(*) AS total,
+  (MAX(id) - MIN(id) + 1) - COUNT(*) AS gaps  -- 空缺数
+FROM prescription_records;
+
+-- 检查序列当前值
+SELECT last_value, is_called FROM prescription_records_id_seq;
+
+-- 查找具体空缺段
+WITH numbered AS (
+  SELECT id, LAG(id) OVER (ORDER BY id) AS prev_id
+  FROM prescription_records
+)
+SELECT (prev_id + 1) AS gap_start, (id - 1) AS gap_end, 
+       (id - prev_id - 1) AS gap_size
+FROM numbered
+WHERE id - prev_id > 1
+ORDER BY gap_start;
+```
+
+**完整修复流程**（无外键依赖的前提下）:
+
+```sql
+BEGIN;
+
+-- 1. 确认没有外键引用该表的 id 列
+SELECT table_name, column_name 
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
+WHERE tc.constraint_type = 'FOREIGN KEY' 
+  AND ccu.table_name = 'your_table_name'
+  AND ccu.column_name = 'id';
+
+-- 2. 删除主键约束
+ALTER TABLE your_table DROP CONSTRAINT your_table_pkey;
+
+-- 3. 按原 ID 顺序重新编号（ROW_NUMBER 保证连续）
+WITH renumbered AS (
+  SELECT id AS old_id, ROW_NUMBER() OVER (ORDER BY id) AS new_id
+  FROM your_table
+)
+UPDATE your_table t
+SET id = r.new_id
+FROM renumbered r
+WHERE t.id = r.old_id;
+
+-- 4. 重建主键
+ALTER TABLE your_table ADD PRIMARY KEY (id);
+
+-- 5. 重置自增序列到 max(id) + 1
+SELECT setval('your_table_id_seq', COALESCE((SELECT MAX(id) FROM your_table), 1));
+
+COMMIT;
+```
+
+**⚠️ 注意事项**:
+- **必须先确认没有外键引用 `id` 列**，否则删除 PK 会报错
+- 如果有关联表引用 `id`，需用 ID 映射表法（先读旧ID→新ID映射，再更新关联表）
+- 如果有大表（10万+记录），建议分批更新或维护窗口操作
+- **先删后重排**: 如果需要在重排前删除部分记录（如测试数据），先 `DELETE FROM ... WHERE ...`，再进行重编号
+- **事务内执行**: 在整个流程外包 `BEGIN/COMMIT`，执行前先备份数据库
+- 如果重编号过程中报主键冲突，说明有同表内重复数据，需先清理
+- 如果重编号过程中报主键冲突，说明有同表内重复数据，需先清理
+
+**一键验证脚本**:
+```bash
+# 重排后检查
+PGPASSWORD=密码 psql -h 主机 -U 用户 -d 数据库 -c "
+SELECT 
+  MIN(id) AS min_id,
+  MAX(id) AS max_id,
+  COUNT(*) AS total,
+  (MAX(id) - MIN(id) + 1) - COUNT(*) AS gaps,
+  last_value 
+FROM your_table, your_table_id_seq;
+"
+# gaps=0 且 max_id 接近 last_value 即为成功
+```
 
 ### ⚠️ API 响应字段完整性验证 (新增关键测试项)
 
@@ -599,6 +741,46 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/auth/users \
 ---
 
 ## 生产部署要点 ⭐ 新增
+
+### 数据库每日自动备份
+
+**场景**: 生产环境需要定期备份 PostgreSQL 数据库，自动清理过期备份。
+
+> 备份恢复 API 的完整 Flask 实现（含 API 端点、文件管理、PGPASSWORD 处理、Python 3.6 兼容性）已移入参考文档 `references/postgresql-backup-restore-api.md`。
+
+#### 备份脚本
+
+```bash
+#!/bin/bash
+# /root/scripts/backup_db.sh
+BACKUP_DIR="/root/db_backups"
+DB_NAME="your_db"
+DB_USER="your_user"
+DB_PASS="your_password"
+RETENTION_DAYS=15
+
+mkdir -p "$BACKUP_DIR"
+FILENAME="${DB_NAME}_$(date +%Y%m%d).sql"
+FILEPATH="${BACKUP_DIR}/${FILENAME}"
+
+PGPASSWORD="$DB_PASS" pg_dump -h localhost -U "$DB_USER" "$DB_NAME" > "$FILEPATH"
+
+# 清理过期备份
+find "$BACKUP_DIR" -name "${DB_NAME}_*.sql" -type f -mtime +${RETENTION_DAYS} -delete
+```
+
+#### 添加到 crontab
+
+```bash
+# 每天凌晨 3:00 执行
+crontab -l 2>/dev/null | { cat; echo "0 3 * * * /root/scripts/backup_db.sh"; } | crontab -
+```
+
+| 参数 | 推荐值 | 说明 |
+|------|--------|------|
+| 备份时间 | `0 3 * * *` | 凌晨 3 点，避开业务高峰 |
+| 保留天数 | 15~30 | 根据磁盘空间和合规要求调整 |
+| 备份大小 | 约 1MB/3500条 | 千万级数据约 100~500MB |
 
 ### Gunicorn 绑定地址选择
 

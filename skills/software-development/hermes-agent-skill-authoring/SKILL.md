@@ -151,6 +151,73 @@ Pick the closest existing category. Don't invent new top-level categories casual
 
 7. **Linking to skills that don't exist in-repo.** `related_skills: [some-user-local-skill]` works for you but breaks for other clones. Prefer only in-repo links.
 
+8. **Writing a skill that requires human explanation to install.** Another agent should be able to read the SKILL.md and install it autonomously. Put all prerequisite install commands in a dedicated section at the top of the body, with exact bash commands. Don't rely on humans explaining steps — the SKILL.md IS the installation medium.
+
+## Designing for Multi-Agent Install
+
+A skill that another agent should be able to install autonomously must be **self-documenting**. This means:
+
+### Pattern: "前置安装" Section
+
+Place a prerequisites section right after the Overview, before any usage details:
+
+```markdown
+## 🔄 安装
+
+另一个智能体只需读取此文件即可自行安装。
+
+### 前置安装
+
+```bash
+# 1. 安装依赖工具 A
+command-to-install-A
+
+# 2. 安装依赖工具 B
+command-to-install-B
+```
+
+### 配置检查
+
+```bash
+tool --version          # 验证安装
+grep "config" config.yaml  # 验证配置
+```
+```
+
+Key rules:
+- The section title should be scannable (`安装` / `前置安装` / `Setup`).
+- Every external dependency must have an exact install command — no "install manually" or "see docs".
+- Include a verification step after each install so the agent can self-check.
+- Configuration changes (config.yaml, .env) must list the exact lines to add or modify.
+- If the skill references files on disk (`scripts/`, `references/`), include a "文件位置" section with URLs so other agents can fetch them.
+
+### When to Apply
+
+- Any skill that installs CLI tools, npm packages, or pip modules.
+- Any skill that modifies Hermes `config.yaml` or gateway settings.
+- Any skill that sets up cron jobs or systemd services.
+- Any skill meant to be shared across multiple agents (especially via GitHub).
+
+### Counter-Example vs. Example
+
+**Bad**: "Install TokScale then configure the plugin"
+**Good**:
+```bash
+npm install -g @tokscale/cli
+# Then add 'rtk-rewrite' to plugins.enabled in config.yaml:
+# plugins:
+#   enabled:
+#     - rtk-rewrite
+```
+
+### Verification
+
+When another agent has loaded the skill:
+- [ ] It can verify all dependencies are installed (`which tool`, `tool --version`)
+- [ ] It can check config correctness (`grep "key" config.yaml`)
+- [ ] If cron setup is involved, it can see the exact cron command or job template
+- [ ] If files need to be fetched from GitHub, the URL is in the skill file
+
 ## Verification Checklist
 
 - [ ] File is at `skills/<category>/<name>/SKILL.md` (not in `~/.hermes/skills/`)

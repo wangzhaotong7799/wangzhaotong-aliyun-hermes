@@ -445,7 +445,92 @@ print(routes)  # ['/api/excel/import', '/api/import']
 
 ---
 
-### Issue 7: SpooledTemporaryFile Compatibility in Python 3.6 + Flask File Uploads
+### Issue 7: 400 BAD REQUEST with Swallowed ImportError/ModuleNotFound
+
+**Symptom**: POST endpoint returns `400 (BAD REQUEST)` immediately. No detailed error logs in gunicorn error log or app.log. Frontend shows generic "导入失败" or similar.
+
+**Root Cause**: A `try/except Exception` block in the handler catches a `ModuleNotFoundError` (or any import-time error) and returns it as a 400 response. This happens most often with **lazy imports** (`import` inside the function body) — the import error gets swallowed and looks exactly like a data validation error.
+
+**Bad Pattern**:
+```python
+@prescriptions_bp.route('/import', methods=['POST'])
+def import_data():
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "未上传文件"}), 400
+        
+        # ... save file to disk ...
+        
+        import import_template          # ← LAZY IMPORT — will raise ModuleNotFoundError
+        original_file = import_template.excel_file
+        import_template.excel_file = file_path
+        import_template.main()          # ← Module doesn't exist!
+        
+        # ... cleanup ...
+        return jsonify({"message": "数据导入成功"})
+    except Exception as e:
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+        return jsonify({"error": str(e)}), 400  # ← ImportError swallowed here as 400!
+```
+
+The actual error message `"No module named 'import_template'"` IS in the response body, but the user only sees "400 (BAD REQUEST)" in the browser console.
+
+**Debug Workflow (6 steps):**
+
+1. **Check the response body, not just the status code**
+
+   The frontend likely shows the error message via `alert(data.error)`. Ask the user what the alert said. If unavailable, test with curl:
+   ```bash
+   # Recreate the POST with a test file
+   curl -s -X POST http://localhost:8080/api/import \
+     -F "file=@test.xlsx" \
+     -H "Authorization: Bearer $(get_token)" | python3 -m json.tool
+   # → {"error": "No module named 'import_template'"}  ← THIS is the real clue
+   ```
+
+2. **Trace the endpoint code — find all lazy imports**
+
+   ```bash
+   # Find all inline 'import' statements inside the route handler
+   grep -n '^\s*import ' api/v1/prescriptions.py
+   # Look for imports INSIDE try/except blocks (not at module level)
+   ```
+
+3. **Verify each module exists in the project**
+
+   ```bash
+   # Check if the module file exists
+   find /project -name "import_template.py" -type f
+   # → (empty) — the module doesn't exist!
+   
+   # Also check for any __init__.py that might expose it as a package
+   grep -r "import_template" /project --include="*.py"
+   ```
+
+4. **Determine the intent** — was the module:
+   - **Never written** (incomplete feature — the developer wrote the route but not the logic)
+   - **Deleted accidentally** (check git history: `git log --oneline --all --diff-filter=D -- '**/import_template*'`)
+   - **Renamed** (check if the code was moved to another file, e.g., `excel.py` — compare old/new API logic)
+
+5. **Fix options**:
+   - **If never written**: Create the missing module with the full import logic
+   - **If renamed**: Update the import statement to point to the correct module
+   - **If removed intentionally**: Remove the route or return a clear "功能未实现" message
+
+6. **Prevent recurrence**: Log the actual exception in the handler before returning 400:
+   ```python
+   except Exception as e:
+       logger.error(f"导入失败: {traceback.format_exc()}")  # Always log the full traceback
+       # ... cleanup ...
+       return jsonify({"error": str(e)}), 400
+   ```
+
+**Key insight**: A 400 response with a generic `try/except Exception` handler is a **black hole** for import errors. The only way to distinguish "bad user input" from "missing code" is to read the response body or add logging.
+
+---
+
+### Issue 8: SpooledTemporaryFile Compatibility in Python 3.6 + Flask File Uploads
 
 **Symptom**: Excel import fails with error `'SpooledTemporaryFile' object has no attribute 'seekable'`
 
@@ -518,7 +603,7 @@ def import_excel():
 
 ---
 
-### Issue 8: Dynamic Column Name Mapping for Flexible Data Import
+### Issue 9: Dynamic Column Name Mapping for Flexible Data Import
 
 **Symptom**: Excel import rejects files with `"缺少必要列：日期，代煎号..."` even though data exists with different column names like `"门店处方日期", "处方编号"`
 
@@ -700,7 +785,7 @@ return jsonify({
 
 ---
 
-### Issue 9: Patient Historical Data Aggregation Accuracy
+### Issue 10: Patient Historical Data Aggregation Accuracy
 
 **Symptom**: Total quantity/days calculation shows partial values (e.g., shows 7 instead of actual 11)
 
@@ -786,7 +871,7 @@ with get_db_session() as session:
     # If different, age filtering is causing data loss!
 ```
 
-### Issue 10: Frontend `fetch()` Missing Auth Token on Admin-Only Endpoints
+### Issue 11: Frontend `fetch()` Missing Auth Token on Admin-Only Endpoints
 
 **Symptom**: User is logged in (token saved in `localStorage`), but admin-only features like backup/restore return `401 (UNAUTHORIZED)`.
 
@@ -877,9 +962,43 @@ console.log('access_token:', localStorage.getItem('access_token'));
 
 ---
 
-### Issue 11: Frontend-Backend API Parameter Name Mismatch
+### Issue 13: Chart.js 图表集成 — 数据格式与数据库日期函数兼容性
 
-**Symptom**: Frontend sends a POST/PUT request, backend returns `400` with `{"error": "缺少必要参数"}`. No other obvious errors.
+> **吸收自 `flask-charts-integration-fix`**（2026-05 合并）
+
+**症状**: Chart.js 图表不显示/空白，或后端 SQLAlchemy 报日期函数错误。
+
+#### 数据库日期函数选择
+
+| 场景 | 正确函数 | 错误写法 |
+|------|---------|---------|
+| PostgreSQL | `func.to_char(date_col, 'YYYY-MM')` | `func.strftime('%Y-%m', date_col)` |
+| SQLite | `func.strftime('%Y-%m', date_col)` | 原生 SQL 也可 |
+| MySQL | `func.DATE_FORMAT(date_col, '%Y-%m')` | 同上 |
+
+#### Missing Months 补全
+
+```python
+# 确保图表显示全部 12 个月（即使某月无数据）
+final_results = []
+for month_idx in range(1, 13):
+    existing = next((r for r in results if r['month_num'] == month_idx), None)
+    final_results.append(existing or {
+        'month': f'{year}-{month_idx:02d}',
+        'total': 0, 'follow_up_1_rate': 0, ...
+    })
+```
+
+#### 前端防御
+
+```javascript
+// 用 || 0 防止 undefined 导致的崩溃
+const data = items.map(item => item.follow_up_1_rate || 0);
+```
+
+完整模板见 `references/chartjs-integration-template.md`（已存档）。
+
+### Issue 14: Frontend-Backend API Parameter Name Mismatch
 
 **Root Cause**: Frontend sends different parameter names than what the backend expects. Common in projects where frontend and backend evolve independently.
 
@@ -1033,6 +1152,14 @@ API 返回 404?
 ├─ 检查前端调用路径 vs 后端实际路径
 │  ├─ 不匹配 → 创建别名 Blueprint
 │  └─ 匹配 → 检查 Blueprint 是否正确注册
+│
+API 返回 400? (非数据验证错)
+├─ 读取响应 body 中的 error 信息
+│  ├─ "No module named 'xxx'" → 懒导入模块不存在
+│  │  ├─ 检查该 .py 文件是否存在
+│  │  └─ 补写模块 or 移除该 import
+│  ├─ "缺少必要参数" → 前后端参数名不匹配
+│  └─ 其他错误 → 按具体错误信息修复
 │
 API 返回 500?
 ├─ 查看 Gunicorn 错误日志获取 traceback

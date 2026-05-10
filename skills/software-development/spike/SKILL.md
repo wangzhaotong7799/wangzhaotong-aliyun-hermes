@@ -36,6 +36,35 @@ decompose  →  research  →  build  →  verdict
                   iterate on findings
 ```
 
+### 0. Capability Verification (for agent-infrastructure spikes)
+
+When the spike involves **designing a multi-agent workflow or automation pipeline that depends on tool/infrastructure capabilities**, run capability verification BEFORE decomposition. This prevents the common failure mode of designing a beautiful workflow that your tools can't actually execute.
+
+**When to do this:** You're planning a workflow that involves scraping a platform, posting to an API, running browser automation, or any action where "does my agent have the tool to do this?" is unclear.
+
+**Method:**
+
+| Step | What | Example |
+|------|------|---------|
+| 1. List dependencies | What tools/capabilities does the workflow need? | 闲鱼数据采集、拼多多比价、自动上架 |
+| 2. Test each one | Run a real probe — don't assume | `curl` the URL, try `web_extract`, check installed packages |
+| 3. Document result | Pass/Fail + details | HTTP 200 but JS-rendered → partial |
+| 4. Produce capability matrix | Table: what works / what doesn't / what needs extra | See template below |
+
+**Capability matrix template:**
+
+```
+| 能力 | 当前状态 | 证据 | 需要什么 |
+|------|---------|------|---------|
+| 采集平台A | ✅ 可行 | web_extract提取30个分类 | 无 |
+| 采集平台B | ❌ 不可行 | HTTP 200但JS渲染，无结构化数据 | 需Playwright |
+| 自动操作平台C | ❌ 不可行 | 无浏览器工具+无API | 需手动 |
+```
+
+**Key rule:** If 2+ critical capabilities fail the probe, **redesign the workflow** to match what your tools can actually do, rather than building a plan around tools you don't have. Present the honest gap to the user before proceeding to decomposition.
+
+**Integrates with the Decomposition step:** once you know what's possible, decompose only the feasible parts. The blocked capabilities become known risks documented in the spike, not hidden assumptions in the plan.
+
 ### 1. Decompose
 
 Break the user's idea into **2-5 independent feasibility questions**. Each question is one spike. Present them as a table with Given/When/Then framing:

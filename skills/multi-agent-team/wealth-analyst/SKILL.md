@@ -1,7 +1,7 @@
 ---
 name: wealth-analyst
 description: 金脉小队总指挥 - 调度多Agent全流程：数据采集→评分建模→策略分析→报告生成→平台交付
-version: 2.3.2
+version: 2.4.0
 author: wangzhaotong7799
 tags: [strategy, domain-analysis, market-research, team-orchestration, multi-agent]
 toolsets_required: ['terminal', 'file']
@@ -21,15 +21,18 @@ links:
     - gold-miner-abacus: 算盘 - 评分分析
     - gold-miner-strategist: 军师 - 策略分析
     - gold-miner-scribe: 执笔 - 报告撰写
+  dependencies:
+    - beautiful-report-formatting: 报告排版美化（必须先加载再执笔）
   references:
     - 域适配指南: references/domain-adaptation.md
     - 年份验证闸门操作手册: references/year-validation-gate.md
+    - 自媒体域执行模式参考: references/self-media-execution-pattern-202605.md
     - 报告模板: ~/.hermes/skills/multi-agent-team/gold-miner-scribe/references/report-template.md
     - Cron任务注册表: references/cron-jobs-registry.md
     - Token监控工具: references/token-cost-tools.md
 ---
 
-# 🪙 猎财 — 金脉小队总指挥 v2.1
+# 🪙 猎财 — 金脉小队总指挥 v2.4
 
 > **角色**: 金脉小队总指挥 | **座右铭**: "数据说话，拒绝画饼"
 > **团队**: 📡天网 + 🧮算盘 + 🧠军师 + ✍️执笔
@@ -71,6 +74,20 @@ links:
 
 收到"生成XX领域报告"指令后，先执行**域适配**（见下节），再按以下顺序严格调度：
 
+### 数据采集条数指引
+
+以下经验数据来自实际执行（2026年5月11日，自媒体域8赛道），供未来执行时参考：
+
+| 赛道数 | 建议 web_search 调用 | 覆盖内容 | 预期产出数据量 |
+|:------:|:--------------------:|:---------|:--------------:|
+| 8个赛道 | 16次（8赛道+6平台+2失败案例） | 赛道数据+平台政策+失败案例 | ~80-100条记录 |
+| 6个赛道 | 12次（6赛道+4平台+2失败案例） | 同上（按比例缩放） | ~60-80条记录 |
+| 4个赛道 | 8次（4赛道+3平台+1失败案例） | 同上（按比例缩放） | ~40-60条记录 |
+
+**数据采集模式**：对每个赛道进行1次宽搜索（含平台关键词+年份），对每个平台进行1次针对性政策搜索，最后1-2次专门搜索失败案例。这种"赛道×平台×失败案例"三维覆盖法已验证有效。
+
+⚠️ **单个赛道搜索词模板**：`"2026年 [赛道名称] 自媒体 [平台1] [平台2] 变现 趋势"` — 这种包含年份+赛道+平台的组合词，在 `web_search` 下召回效果最好。
+
 ### 阶段一：域适配（最先执行）
 
 **两种模式：**
@@ -80,7 +97,7 @@ links:
 1. **调查领域/域**
 2. **赛道/细分方向**
 3. **数据平台/来源**
-4. **报告深度** （完整版~200行 vs 精简版~50行）
+4. **报告深度** （完整版~300行 vs 精简版~50行）
 
 **B. Cron/无交互模式** — 指令中已包含完整域参数，或来自定时任务时：
 直接查阅 `references/domain-adaptation.md` 获取配置，跳过用户确认。
@@ -180,16 +197,25 @@ delegate_task(
 
 ### 阶段五：报告生成 → 委托执笔
 
+> ⚠️ **排版先行：生成报告 Markdown 前，先加载 `beautiful-report-formatting` 技能**
+> 按该技能的排版规范（层级结构、box-drawing核心框、评分矩阵模板、表格对齐）先格式化 Markdown，确保源文档结构美观，再进行后续转换。
+
 ```
 delegate_task(
   goal="整合所有输入，按模板生成完整的 Markdown 报告",
   context="域参数设定 + 天网数据 + 算盘评分 + 军师策略",
   toolsets=['file'],
-  skills=['gold-miner-scribe']
+  skills=['gold-miner-scribe', 'beautiful-report-formatting']
 )
 ```
 
 等待返回报告。
+
+**报告深度指引**：
+- 完整版：建议 300-500 行，含赛道评分矩阵+策略建议+失败案例+数据来源附录
+- 精简版：建议 50-80 行，仅执行摘要+核心结论+评分排行
+- 覆盖要求：至少包括「市场规模」「竞争格局」「增长驱动」「风险提示」四个维度
+- 排版要求：遵守 `beautiful-report-formatting` 规范，前置核心结论框、评分矩阵加权高亮、数据表格对齐有序
 
 ### 🔄 手动执行模式（无 delegation 工具时的备选方案）
 
@@ -212,9 +238,10 @@ delegate_task(
 **⚠️ 手动模式坑点：**
 1. **`mkdir -p data` 可能被安全扫描拦截** — 终端命令 `mkdir -p data` 在部分环境会被安全审查弹窗拦截（Tirith 安全扫描）。替代方案：用 `write_file(path="data/.gitkeep", content="")` 创建占位文件，write_file 会自动创建不存在的目录。不要反复尝试被拦截的 terminal 命令。
 2. **文件命名约定灵活** — `tianwang_*.md` / `abacus_*.md` / `strategist_*.md` 是推荐前缀，实际用描述性命名（如 `tianwang_data.md`、`abacus_scoring.md`）亦可，只要每个阶段文件命名清晰可追溯即可。
-3. **`web_search` 对中文失败案例的召回尚可** — 搜索中文关键词（如"短剧 亏本 制作公司 倒闭"）时 web_search 能返回掌阅科技亏损、中文在线亏损等有效案例。不必强求全部走 Exa API。但英文和混合关键词场景仍推荐 Exa 语义搜索。
+3. **`web_search` 对中文失败案例的召回尚可** — 搜索中文关键词（如"短剧 亏本 制作公司 倒闭"）时 web_search 能返回有效案例。不必强求全部走 Exa API。但英文和混合关键词场景仍推荐 Exa 语义搜索。
+4. **`write_file` 可能触发 sibling subagent 文件覆盖警告** — 在手动模式下使用 `write_file` 写入 `data/` 目录文件时，系统可能自动生成 sibling subagents 同时向同一文件写入内容，触发类似 `file was modified by sibling subagent` 的警告。**对策：** 忽略该警告（文件内容在写入时已成功保存），但最好在写入前先 `read_file` 确认最新状态，避免覆盖兄弟进程的内容。最终的报告文件建议在写入后立即用 `read_file` 验证内容完整性。
 
-### 阶段六：最终质检
+### 阶段六：最终质检（含排版质量门）
 
 检查项：
 1. 报告是否包含全部章节（按域适配指南确定章节结构）
@@ -223,7 +250,13 @@ delegate_task(
 4. 报告中各赛道数据是否标注了数据年份范围（例："本赛道数据基于2026年1-5月公开信息"）
 5. 是否包含风险提示/失败案例
 6. 是否有 `[需人工调研]` 标记需要处理
-7. 是否在数据局限处有明确说明（如"赛道C仅2条有效数据，评分置信度较低"）
+7. 是否在数据局限处有明确说明（如"赛道C仅2条有效数据，评分置信度偏低"）
+8. **排版美观检查（必检）：**
+   - 执行摘要是否使用了 box-drawing 核心结论框（`┌──┐`）
+   - 评分矩阵是否有加权总分行，分数是否粗体高亮
+   - 表格是否对齐、表头是否与内容有视觉区分
+   - 层级是否不超过 4 级深度
+   - 附录数据来源是否编号整理
 
 通过后将报告写入 `data/report_YYYYMM.md`。
 
@@ -317,7 +350,11 @@ CRON_MODE
 完成后将报告通过飞书发送给用户。
 ```
 
-**⚠️ Cron 交付冲突**：当 cron job 被配置了系统级自动交付（如 `DELIVERY: Your final response will be automatically delivered to the user`），系统会自动投递最终输出，此时不要调用 send_message 或运行 Feishu 脚本。Cron prompt 中如果同时包含 Feishu 交付指令和系统交付指令，优先遵循系统指令（系统会自行处理投递），跳过阶段七的 Feishu 步骤。
+**⚠️ Cron 交付冲突（已验证 ✅）**：当 cron job 被配置了系统级自动交付（如 `DELIVERY: Your final response will be automatically delivered to the user`），系统会自动投递最终输出，此时不要调用 send_message 或运行 Feishu 脚本。Cron prompt 中如果同时包含 Feishu 交付指令和系统交付指令，优先遵循系统指令（系统会自行处理投递），跳过阶段七的 Feishu 步骤。
+
+**确认方法**：cron prompt 中若出现 `DELIVERY:` 标记，即表示系统已配置自动投递。此时完整的报告内容会作为 final response 被投递到配置的目标。Agent 的任务是生成高质量报告内容，而非手动调用投递工具。
+
+**验证记录**：2026年5月11日自媒体域8赛道Cron执行已验证该规则——报告以final response形式交付，Feishu步骤被正确跳过。
 
 **飞书交付集成**：\n- send_message 只能发送纯文本消息，不能发文件/附件。用户通过飞书 DM 接收报告（当前 chat_id 见 memory 和 cron prompt）\n- 长报告（>100行）分 2-3 段发送\n- 第一段：核心结论 + 评分排行\n- 第二段：平台政策 + 案例 + 路线图\n- 第三段：风险提示 + 附录\n\n**⚠️ 非网关模式下的飞书发送（当 send_message 工具不可用时）**\n\n通过 Feishu Open API 直接发送（Python + urllib）：\n```python\nsource ~/.hermes/.env 2>/dev/null\n# 1. 获取 token\nTOKEN=$(curl -s -X POST \"https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"app_id\":\"$FEISHU_APP_ID\",\"app_secret\":\"$FEISHU_APP_SECRET\"}' \\\n  | python3 -c \"import sys,json; print(json.load(sys.stdin).get('tenant_access_token',''))\")\n\n# 2. 发送文本消息\npython3 -c \"\nimport json, urllib.request\npayload = {\n    'receive_id': '<用户飞书DM chat_id>',  # 读取自memory或cron prompt\n    'msg_type': 'text',\n    'content': json.dumps({'text': '消息内容'}, ensure_ascii=False)\n}\nreq = urllib.request.Request(\n    'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',\n    data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),\n    headers={'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/json; charset=utf-8'},\n    method='POST')\nresp = urllib.request.urlopen(req)\n\"\n```\n避坑：\n- 每条消息建议控制在 600 字符以内，过长的消息可能导致 API 400 错误\n- emoji 和换行符需包含在 text 内容中，不要放到 JSON 结构外\n- TOKEN 过期时间为 2 小时，每次发送前重新获取
 - **评分表在飞书可能渲染不全** — 子 Agent 发送的报告中的 Markdown 表格可能不显示。解决办法：猎财巡检后，用 send_message 单独补发一份格式清晰的评分排行表。

@@ -332,6 +332,224 @@ python-dotenv==0.19.2
 
 ---
 
+## Post-Migration: Fix PostgreSQL Auto-Increment Sequence
+
+⚠️ **CRITICAL** — After migrating data with explicit IDs, PostgreSQL's sequence is NOT automatically updated.
+
+### The Problem
+
+When you migrate data preserving old IDs (e.g., V1→V2 migration with IDs like 5197), PostgreSQL's `SERIAL`/`IDENTITY` sequence still starts from wherever it was initialized (often 1 or a low number). New records get **lower IDs than old migrated data**, causing:
+
+- `ORDER BY id DESC` shows **older data first** (migrated high IDs on top)
+- Users see newly imported records at the **bottom of the list**
+- Any logic relying on ID monotonicity breaks
+
+### Detection
+
+```sql
+-- Compare sequence value vs actual max ID
+SELECT last_value FROM tablename_id_seq;
+SELECT MAX(id) FROM tablename;
+
+-- If last_value << MAX(id) → sequence is behind!
+```
+
+In the gaofang-v2 case:
+| Metric | Value | Issue |
+|--------|-------|-------|
+| `MAX(id)` | 5197 | V1 migrated data stays at high IDs |
+| Sequence `last_value` | 3501 | Far behind max — new records get low IDs |
+| Sort order | `id DESC` | Puts April data (ID 5197) before May data (ID 3501) 🚫 |
+
+### Fix: Synchronize the Sequence
+
+```sql
+-- Set sequence to continue from max existing ID
+SELECT setval('tablename_id_seq', (SELECT MAX(id) FROM tablename));
+```
+
+In a migration script using SQLAlchemy:
+
+```python
+from sqlalchemy import text
+
+with engine.begin() as conn:
+    result = conn.execute(text("SELECT MAX(id) FROM prescription_records")).fetchone()
+    max_id = result[0]
+    conn.execute(text(f"SELECT setval('prescription_records_id_seq', {max_id})"))
+    print(f"✅ Sequence set to {max_id}")
+```
+
+### Alternative: Sort by created_at Instead
+
+If you can't fix the sequence (shared DB, multiple apps), change the sort:
+
+```python
+# ❌ Broken: puts migrated data (high IDs) first
+query = query.order_by(PrescriptionRecord.id.desc())
+
+# ✅ Correct: always newest first regardless of ID discontinuity
+query = query.order_by(PrescriptionRecord.created_at.desc(), PrescriptionRecord.id.desc())
+```
+
+This is the **safer semantic fix** — it doesn't depend on ID monotonicity.
+
+### When This Happens
+
+- After any data migration that preserves original IDs
+- After bulk inserts with explicit `id` values
+- After `SET IDENTITY_INSERT` / direct ID assignment
+- Anytime you see "new records go to the bottom" in an `id DESC` sorted list
+
+---
+
+## Post-Migration Deep Dive: ID Gap Analysis & Renumbering
+
+When the gap between `last_value` and `MAX(id)` is large enough to cause real business confusion (e.g., April data at ID 5197 shows before May data at ID 3501), **fixing the sequence isn't enough** — you need to decide between two strategies.
+
+### Strategy Comparison
+
+| Strategy | What It Does | When To Use | Data Impact |
+|----------|------------|-------------|-------------|
+| **Fix Sequence Only** | `SELECT setval('seq', MAX(id))` | Gaps are small, no sorting confusion | ✅ Zero — original IDs preserved |
+| **Renumber All IDs** | Reassign IDs consecutively | Gaps are large, sorting by id is busted | ⚠️ ID column rewritten — requires no FK references to `id` |
+
+### When Renumbering Makes Sense
+
+The **key diagnostic** that tells you renumbering is worth it:
+
+```sql
+-- Run this diagnostic
+SELECT 
+  MIN(id) AS min_id,
+  MAX(id) AS max_id,
+  COUNT(*) AS total_records,
+  (MAX(id) - MIN(id) + 1) AS id_range,
+  (MAX(id) - MIN(id) + 1) - COUNT(*) AS total_gaps,
+  ROUND(100.0 * (MAX(id) - MIN(id) + 1 - COUNT(*)) / (MAX(id) - MIN(id) + 1), 1) AS gap_pct
+FROM prescription_records;
+```
+
+**Real example** (from gaofang-v2 migration):
+| Metric | Value |
+|--------|-------|
+| MIN(id) | 1 |
+| MAX(id) | 5197 |
+| Total records | 3505 |
+| ID range | 5197 |
+| Total gaps | **1692** |
+| Gap % | **32.5%** |
+
+With 32% of IDs wasted, sorted by `id DESC`:
+- **V1 migrated data** (April, IDs 5190-5197) appears **first** ← looks "newest"
+- **V2 freshly imported data** (May, IDs 3490-3501) appears **last** ← looks "oldest"
+
+This is exactly backwards from what users expect. Renumbering is the right fix here.
+
+### Gap Analysis Tool
+
+Find every hole in the ID sequence:
+
+```sql
+WITH numbered AS (
+  SELECT id, LAG(id) OVER (ORDER BY id) AS prev_id
+  FROM prescription_records
+  WHERE id <= (SELECT MAX(id) FROM prescription_records)
+)
+SELECT (prev_id + 1) AS gap_start, (id - 1) AS gap_end, 
+       (id - prev_id - 1) AS gap_size
+FROM numbered
+WHERE id - prev_id > 1
+ORDER BY gap_start;
+```
+
+### Renumbering IDs — The Complete Recipe
+
+**Prerequisites:**
+- ✅ No FK constraints reference `prescription_records.id` (check with query below)
+- ✅ Other tables reference records via business key (e.g., `prescription_id` / 代煎号), not DB `id`
+- ✅ Application code doesn't hardcode ID values
+
+**Step 1: Verify no FK references to `id`**
+
+```sql
+SELECT tc.table_name, kcu.column_name
+FROM information_schema.table_constraints AS tc
+JOIN information_schema.key_column_usage AS kcu
+  ON tc.constraint_name = kcu.constraint_name
+JOIN information_schema.constraint_column_usage AS ccu
+  ON ccu.constraint_name = tc.constraint_name
+WHERE tc.constraint_type = 'FOREIGN KEY'
+  AND ccu.table_name = 'prescription_records'
+  AND ccu.column_name = 'id';
+```
+
+If this returns zero rows → **safe to renumber**.
+
+**Step 2: Delete records that would be reimported (optional)**
+
+If the user plans to reimport certain records after renumbering, delete them first:
+
+```sql
+DELETE FROM prescription_records WHERE id IN (3497, 3498, 3499, 3500, 3501);
+```
+
+**Step 3: Renumber with ROW_NUMBER()**
+
+```sql
+UPDATE prescription_records t
+SET id = t2.new_id
+FROM (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY id) AS new_id
+  FROM prescription_records
+) t2
+WHERE t.id = t2.id;
+```
+
+This reassigns IDs 1-N based on the current sort order (preserving relative ordering).
+
+**Step 4: Reset the sequence**
+
+```sql
+ALTER SEQUENCE prescription_records_id_seq RESTART WITH N;
+-- N = (SELECT MAX(id) FROM prescription_records) + 1
+```
+
+**Step 5: Verify**
+
+```sql
+SELECT MIN(id), MAX(id), COUNT(*),
+       (MAX(id) - MIN(id) + 1) - COUNT(*) AS remaining_gaps
+FROM prescription_records;
+-- Expected: remaining_gaps = 0
+```
+
+### Caution: When NOT to Renumber
+
+| Condition | Concern | Alternative |
+|-----------|---------|------------|
+| FK constraints reference `id` | Would break referential integrity | Fix the sequence only, or update FK targets |
+| Other apps/tools hardcode ID references | Would break external integrations | Leave IDs as-is, change sort to `created_at DESC` |
+| API consumers cache `id` values | Would cause stale cache lookups | Plan renumbering during maintenance window |
+| You just need the *current* sort fixed | Symptom is mild | Change sort order instead: `ORDER BY created_at DESC, id DESC` |
+
+### The Simplest Fix When Renumbering Is Too Heavy
+
+```python
+# In the query layer — no data changes needed
+query = query.order_by(
+    PrescriptionRecord.created_at.desc(),
+    PrescriptionRecord.id.desc()  # tiebreaker
+)
+```
+
+This is the **safest, zero-risk fix** — it always shows newest data first, regardless of ID discontinuities. Use this when:
+- You can't do maintenance downtime
+- The gaps don't bother you functionally
+- You want to avoid touching the `id` column
+
+---
+
 ## Verification Steps
 
 After migration completes, verify data integrity:

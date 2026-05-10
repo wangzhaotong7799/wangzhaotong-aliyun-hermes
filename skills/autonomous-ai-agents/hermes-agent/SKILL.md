@@ -166,15 +166,17 @@ hermes sessions stats       Session store statistics
 
 ### Cron Jobs
 
-```
-hermes cron list            List jobs (--all for disabled)
-hermes cron create SCHED    Create: '30m', 'every 2h', '0 9 * * *'
-hermes cron edit ID         Edit schedule, prompt, delivery
+```bash
+hermes cron list            # List jobs (--all for disabled)
+hermes cron create SCHED    # Create: '30m', 'every 2h', '0 9 * * *'
+hermes cron edit ID         # Edit schedule, prompt, delivery
 hermes cron pause/resume ID Control job state
-hermes cron run ID          Trigger on next tick
-hermes cron remove ID       Delete a job
-hermes cron status          Scheduler status
+hermes cron run ID          # Trigger on next tick
+hermes cron remove ID       # Delete a job
+hermes cron status          # Scheduler status
 ```
+
+**Cron prompt patterns**: See `references/cron-job-patterns.md` for reusable templates covering daily token reports, website health checks, and general cron job authoring best practices.
 
 ### Webhooks
 
@@ -607,7 +609,7 @@ terminal(command="tmux new-session -d -s resumed 'hermes --resume 20260225_14305
 ### Gateway issues
 Check logs first:
 ```bash
-grep -i "failed to send\|error" ~/.hermes/logs/gateway.log | tail -20
+grep -i "failed to send\\|error" ~/.hermes/logs/gateway.log | tail -20
 ```
 
 Common gateway problems:
@@ -626,6 +628,109 @@ If `auxiliary` tasks (vision, compression, session_search) fail silently, the `a
 hermes config set auxiliary.vision.provider <your_provider>
 hermes config set auxiliary.vision.model <model_name>
 ```
+
+---
+
+## Token Optimization Toolkit
+
+Three tools to understand and reduce token consumption with Hermes Agent:
+
+### TokScale — Global Token Monitor
+
+Install: `npm install -g @tokscale/cli`. Run:
+```bash
+tokscale                  # Interactive TUI (6 views)
+tokscale models           # Per-model breakdown
+tokscale monthly          # Daily trend
+tokscale hourly           # Hourly granularity
+tokscale graph            # Daily breakdown (good for reporting)
+tokscale graph --week     # Last 7 days, daily entries
+tokscale graph --since YYYY-MM-DD --until YYYY-MM-DD  # Custom range
+tokscale graph --client hermes --today  # Today's usage for Hermes
+tokscale models --json    # Scriptable JSON output
+```
+
+`tokscale graph` returns JSON with per-day `totals.tokens/cost/messages` and `tokenBreakdown(input/output/cacheRead/cacheWrite/reasoning)` — ideal for automated daily reporting via cron jobs.
+
+Supports Hermes Agent natively (reads `~/.hermes/state.db`), plus OpenCode, Claude Code, Codex, Gemini CLI, OpenClaw, Cursor, and 15+ other AI coding agents.
+
+### RTK (Rust Token Killer) — Terminal Command Compression
+
+Reduces token consumption of terminal commands by 60–90% by filtering, grouping, and truncating verbose output.
+
+**Install**:
+```bash
+# Pre-built binary (recommended, 4.3MB):
+curl -L --connect-timeout 30 --max-time 180 \
+  "https://github.com/rtk-ai/rtk/releases/latest/download/rtk-x86_64-unknown-linux-musl.tar.gz" \
+  -o /tmp/rtk.tar.gz && cd /tmp && tar xzf rtk.tar.gz && sudo cp rtk /usr/local/bin/rtk
+
+# Or via cargo (requires Rust toolchain):
+# cargo install --git https://github.com/rtk-ai/rtk
+```
+
+Verify: `rtk --version` and `rtk rewrite "git status"` should output `rtk git status`.
+
+### rtk-hermes Plugin — Hermes ↔ RTK Integration
+
+Enables RTK in Hermes Agent sessions via a `pre_tool_call` plugin.
+
+**Configure global hook** (sets up shell-level command interception for all terminal output):
+```bash
+rtk init -g --auto-patch
+```
+This registers `rtk hook claude` as a native binary hook, creates `~/.claude/RTK.md`, and patches `settings.json` with `PreToolUse` hook configuration. Verify with `rtk init --show`.
+
+**Install into Hermes Python environment**:
+```bash
+$(dirname "$(which hermes)")/python -m pip install --upgrade rtk-hermes
+```
+
+**Enable in config.yaml**:
+```yaml
+plugins:
+  enabled:
+    - rtk-rewrite
+```
+
+**Verify plugin registration**:
+```bash
+$(dirname "$(which hermes)")/python -c "
+import importlib.metadata as md
+for ep in md.entry_points().select(group='hermes_agent.plugins'):
+    if ep.name == 'rtk-rewrite':
+        print('✅ rtk-rewrite registered:', ep.value)
+"
+```
+
+**How it works**: The plugin intercepts `pre_tool_call` for terminal commands, runs `rtk rewrite "<command>"` to compact it, then passes the rewritten command to the shell. Commands like `git status`, `ls`, `cat`, `pytest`, `grep` all get optimized output. Plugin is fail-open — if RTK isn't available or the rewrite fails, the original command runs unchanged.
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `RTK_HERMES_MODE` | `rewrite` | `rewrite` mutates commands; `suggest` logs without changing; `off` disables |
+| `RTK_HERMES_TIMEOUT_MS` | `2000` | Max ms to wait for `rtk rewrite` per command |
+| `RTK_HERMES_PREVIEW_MARKER` | `true` | Prefix rewritten commands with `: RTK &&` |
+
+Note: Plugin takes effect after gateway restart (`hermes gateway restart`) or new CLI session. Not active mid-conversation.
+
+### Estimated Savings
+
+| Operation | Standard Tokens | With RTK | Savings |
+|-----------|:---------------:|:--------:|:-------:|
+| `git status` | ~3,000 | ~600 | -80% |
+| `git log -n 10` | ~2,500 | ~500 | -80% |
+| `pytest` / `cargo test` | ~25,000 | ~2,500 | -90% |
+| `ls` / `tree` | ~2,000 | ~400 | -80% |
+| `cat` large file | ~40,000 | ~12,000 | -70% |
+| **Per-session typical** | **~118,000** | **~23,900** | **~-80%** |
+
+### Hermes Dashboard (Token Analytics)
+
+Two options:
+
+1. **Built-in** `hermes dashboard` — web UI at `localhost:9119` with token summaries, cache hit rate, cost estimates. Start with `hermes dashboard` or `hermes dashboard --tui` for embedded chat. `hermes dashboard --status` checks running instances.
+
+2. **Bichev/hermes-dashboard** (deep analysis) — full feature dashboard with per-model/platform/tool breakdown, cost alerts, conversation depth histograms, error tracking, heatmaps. Requires a domain with DNS + Caddy HTTPS. Deploy from local machine via `./deploy.sh <secret>`. Sits as transparent proxy between Hermes and LLM provider at `ANTHROPIC_BASE_URL=http://localhost:3333`.
 
 ---
 
