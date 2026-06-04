@@ -398,6 +398,31 @@ If you catch yourself thinking:
 
 ## Hermes Agent Integration
 
+### Debugging Systemd Services & Shell Scripts
+
+**WHEN a systemd service fails with a non-zero exit code:**
+
+Systemd-invoked scripts run in a minimal environment (stripped PATH, no interactive shell profile). A script that works in your terminal can fail silently under systemd.
+
+**Step-by-step isolation:**
+
+1. **Check exit code:** `systemctl status <service> --no-pager`
+   - 127 = command not found (PATH issue)
+   - 2 = command syntax/argument error
+   - 1 = generic script failure
+
+2. **Manually reproduce each command** — Run them one by one in the terminal with absolute paths. The script's `2>/dev/null` often masks the real error.
+
+3. **Common pitfalls:**
+   - `source venv/bin/activate` fails if `venv/` isn't in the expected cwd — use absolute path
+   - `hermes send TARGET "msg"` is wrong in v0.15.1+ — must be `hermes send --to TARGET "msg"`
+   - Gateway has no HTTP server — don't curl for health checks; grep the gateway log for connection confirmation
+   - `2>/dev/null` hides real errors — remove it during debugging
+
+4. **Test with:** `systemctl restart <service> && journalctl -u <service> --no-pager -n 20`
+
+See `references/debugging-systemd-services.md` for the full reproduction transcript and gateway-specific guidance.
+
 ### Investigation Tools
 
 Use these Hermes tools during Phase 1:
@@ -406,6 +431,12 @@ Use these Hermes tools during Phase 1:
 - **`read_file`** — Read source code with line numbers for precise analysis
 - **`terminal`** — Run tests, check git history, reproduce bugs, check service status
 - **`execute_code`** — When `terminal()` commands get blocked by security scans (pattern `tirith:unknown`), use `execute_code` calling `hermes_tools.terminal` as a workaround
+- **Tirith not installed** — When Hermes prints "tirith security scanner enabled but not available — command scanning will use pattern matching only", the tirith binary failed to auto-install. Two common failure modes:
+  - **GitHub download timeout** (from China: `curl` to `github.com` times out 30s+). Fix: re-download with `--connect-timeout 30 --max-time 180 --retry 3`, or use a GitHub mirror.
+  - **GLIBC mismatch** on Alibaba Cloud Linux 3 (glibc 2.32) or RHEL8-based distros — the tirith binary from GitHub Actions is compiled against glibc ≥2.33 and segfaults on older glibc. There is no x86_64 musl variant. Fix: disable tirith (`tirith_enabled: false` in config.yaml); pattern-matching fallback provides equivalent security.
+  - Check the failure marker: `cat /root/.hermes/.tirith-install-failed` (values: `download_failed`, `cosign_missing`, `unsupported_platform`).
+  - The marker has a 24hr TTL — delete it to force retry: `rm /root/.hermes/.tirith-install-failed`. But if the underlying issue (GLIBC, network) persists, retry will fail again.
+- **Debugging systemd service scripts** — See `references/debugging-systemd-services.md` for the full guide. Key pitfalls: PATH stripped by systemd, `2>/dev/null` masks real errors, `hermes send` needs `--to` flag in v0.15.1+, gateway has no HTTP endpoint.
 - **`web_search`/`web_extract`** — Research error messages, library docs
 
 ### With delegate_task

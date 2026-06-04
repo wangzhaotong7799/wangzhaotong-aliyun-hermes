@@ -568,6 +568,16 @@ QA 测试 ← 整合成果
 - [Resilient System Design](链接)
 - [RBAC Best Practices](链接)
 
+### Absorbed Skills
+
+The following former standalone skills have been consolidated into this umbrella.
+Their unique content is preserved in the `references/` subdirectory:
+
+| Former Skill | Reference File | Content Summary |
+|:---|---|:---:|
+| `multi-agent-team-enhancement` | `references/team-enhancement-implementation.md` | Deployment steps, pitfall refinement, verification checklist |
+| `multi-agent-team-upgrade-framework` | `references/team-upgrade-framework-extras.md` | Template customization, scheduler config, success metrics, maintenance |
+
 ---
 
 **核心理念**: 升级不是简单的功能叠加，而是通过重新思考架构、建立标准化的协作规范、引入生产级的可靠性保障，将松散的原型进化为企业级平台。这需要系统性思维和耐心打磨，但回报是质的飞跃。

@@ -1,12 +1,12 @@
 ---
 name: flask-mobile-pwa
-description: "为现有 Flask API 后端添加独立移动端 PWA — 零后端改动，独立 /mobile/ 目录，聚焦核心模块"
-version: 1.0.0
+description: "Flask 前端架构模式 — 独立移动端 PWA 添加 + 单页面到多页面重构。覆盖独立 /mobile/ 目录、预加载/懒加载混合策略、分页集成"
+version: 1.1.0
 author: Hermes Agent
 metadata:
   hermes:
-    tags: [flask, pwa, mobile, frontend]
-    related_skills: [flask-web-preload-lazy-load, plan]
+    tags: [flask, pwa, mobile, frontend, refactoring, preload, lazy-load]
+    related_skills: [plan]
 ---
 
 # Flask 移动端 PWA 添加指南
@@ -85,7 +85,53 @@ PWA 登录后复用同一套 JWT + RBAC 权限系统。医助角色自动应用 
 
 ### 第四步（关键）：API 分页
 
-**移动端必须加分页。** 桌面端可以一次加载几百条数据，手机浏览器会直接卡死。
+**移动端必须加分页（或 limit 限制）。** 桌面端可以一次加载几百条数据，手机浏览器加载数兆 JSON + 渲染大量 DOM 会直接卡死或崩溃，显示「加载失败」。
+
+#### 场景 A：API 已有分页参数
+
+```javascript
+// 后端已有 page / page_size / per_page 参数
+Api.getPrescriptions({ page: 1, per_page: 50 });
+```
+
+#### 场景 B：API 无分页参数（需要加 limit）
+
+当后端 API 没有分页功能时（如 `/api/follow-up` 一次性返回全部 3000+ 条），PWA 必须：
+
+1. **后端加 `limit` 参数** — 过滤后截取前 N 条：
+```python
+limit = request.args.get('limit', type=int)
+if limit and limit > 0:
+    result = result[:limit]
+```
+
+2. **PWA 前端默认传 limit=N**：
+```javascript
+function getList() {
+    var params = { limit: 50 };  // ← 每次只查 50 条
+    if (currentTab === '待复诊') {
+        params.follow_up_status = '待复诊';
+    } else {
+        params.follow_up_status = '已复诊';
+    }
+    return Api.getFollowups(params);
+}
+```
+
+3. **验证前后端联动**：
+```bash
+# 测后端 limit 参数
+curl -s "http://localhost:8080/api/follow-up?limit=50" | wc -c
+# → ~70KB (vs 无limit时 ~4.4MB ↓99%)
+
+# 测 JS 文件确实传了 limit
+grep -n 'limit' static/mobile/js/page-*.js
+# → page-followup.js:9:    var params = { limit: 50 };
+```
+
+**为什么必须后端限而不是前端限？** 前端通过 `response.slice(0, 50)` 切分数据时，浏览器已经下载完整的 4.4MB JSON + 浪费手机流量。后端限流可以节省 99% 的传输量。
+
+**审核清单**：每新增一个 PWA 页面，检查对应 API 调用是否加了 `limit` 或分页参数：
 
 ```javascript
 // ❌ 错误：没有分页 → 加载全部数据（手机卡死）
@@ -750,3 +796,14 @@ curl -s "http://localhost:8080/api/prescriptions?limit=1" \
 - [ ] 桌面端现有功能不受影响
 - [ ] 没有隐藏的旧 gunicorn 进程占端口
 - [ ] mobile 路由注册在 catch-all 前面
+
+---
+
+## Absorbed Skills
+
+The following former standalone skills have been consolidated into this umbrella.
+Their content is preserved as reference files:
+
+| Former Skill | Reference File | Content Summary |
+|:---|---|:---|
+| `flask-single-page-to-multi-page-refactor` | `references/single-to-multi-page-refactoring.md` | Single HTML (~5000+ lines) to multi-page architecture: lazy-load/preload hybrid strategy, page loader registry, hash routing, pagination controls, JavaScript load timing, window.app export pitfalls |

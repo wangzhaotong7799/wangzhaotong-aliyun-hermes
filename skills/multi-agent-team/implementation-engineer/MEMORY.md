@@ -1,21 +1,48 @@
-# ⚡ 闪电 (Sparky) — 工作记忆
+---
+name: ⚡ 闪电 (Sparky)
+author: 星光小队
+created: 2026-05-12
+version: 1.0.0
+---
 
-## 👤 主人信息
-- **项目根目录**：`/root/projects/drug-distribution-system/gaofang-v2/`
-- **运行环境**：venv38 + gunicorn 23.0.0 + systemd
-- **代码风格**：以实用为主，不过度抽象
+# ⚡ 闪电 (Sparky)的工作记忆
 
-## 📋 已知功能模块
-- PWA 移动端：pickup / followup / reminders 三个页面
-- API 端：prescriptions、follow-ups、reminders、assistants
-- 前后端分离：JS fetch + Flask REST
+## 一、基本信息
 
-## 🧠 开发经验
-- PWA 是独立目录，不影响桌面端 SPA
-- 状态筛选在 client 端做（filter + render），API 只做按需加载
-- 编辑医助走 PUT /api/prescriptions/<id>，已有权限控制
-- gunicorn 的 --reuse-port 是上线前一天加的
+| 项目 | 内容 |
+|------|------|
+| 所属 | 星光小队 |
+| 角色 | 实现工程师 |
+| 创建日期 | 2026-05-12 |
+| 上属 | 星光总指挥 |
 
-## ⏳ 待跟进
-- [ ] 搜索功能是否支持拼音匹配
-- [ ] 了解主人对代码注释风格的要求
+---
+
+## 二、已知项目背景
+
+（暂无 — 首次工作后补充）
+
+---
+
+## 三、独立的技能库
+
+| 库 | 路径 | 用途 |
+|:--:|------|------|
+| 🛠 脚本库 | `scripts/` | 代码生成、测试框架 |
+| 📚 参考库 | `references/` | 专业知识参考、参数表 |
+| 📋 模板库 | `templates/` | 输出模板、格式规范 |
+
+**迭代规则**：每次工作完成后，将新发现的方法/工具/教训存入对应目录。
+
+---
+
+## 四、经验记录
+
+（暂无 — 首次工作后补充）
+
+---
+
+## 五、待办
+
+- [ ] 首次接受任务后，记录工作流程和有效方法
+- [ ] 积累本角色的最佳实践

@@ -170,3 +170,76 @@ ls /www/wwwlogs/ 2>/dev/null
 - [ ] `deliver: origin` set (or feishu:chat_id for specific delivery)
 - [ ] Skill attached if applicable (for tool access like terminal, web)
 - [ ] Schedule tested with initial run time in mind
+
+## Script-Based Cron Jobs
+
+### Execution Model
+
+Hermes cron jobs can use a `script:` field instead of a skill/prompt. When a script is set, the scheduler runs it via `subprocess.run([sys.executable, script_path], ...)` — this means **Python only**. Shell scripts (`.sh` with `#!/bin/bash`) will fail with `SyntaxError: invalid syntax` because Python tries to parse bash syntax.
+
+### Conversion Pattern: Bash → Python
+
+When converting a bash script for use as a cron job script:
+
+```python
+#!/usr/bin/env python3
+"""Gunicorn worker hot-reload — Python version for Hermes cron.
+
+Replaces the original bash script which failed because Hermes cron
+executes all scripts with sys.executable (Python), not the system shell.
+"""
+
+import subprocess
+import sys
+from datetime import datetime, timezone, timedelta
+
+# Localize as needed (example: Beijing Time UTC+8)
+TZ = timezone(timedelta(hours=8))
+def now_local() -> str:
+    return datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+def main():
+    # Instead of: MASTER_PID=$(systemctl show -p MainPID myservice.service | cut -d= -f2)
+    result = subprocess.run(
+        ["systemctl", "show", "-p", "MainPID", "my-service.service"],
+        capture_output=True, text=True, timeout=10
+    )
+    if result.returncode != 0:
+        print(f"[{now_local()}] ERROR: systemctl failed: {result.stderr.strip()}")
+        sys.exit(1)
+
+    output = result.stdout.strip()
+    pid_str = output.split("=", 1)[-1].strip() if "=" in output else ""
+
+    if not pid_str or not pid_str.isdigit() or int(pid_str) == 0:
+        print(f"[{now_local()}] ERROR: PID not found (output: {output!r})")
+        sys.exit(1)
+
+    pid = int(pid_str)
+
+    # Instead of: kill -HUP "$MASTER_PID"
+    subprocess.run(["kill", "-HUP", str(pid)], check=True, capture_output=True, timeout=5)
+
+    print(f"[{now_local()}] ✓ HUP sent to PID {pid}")
+
+if __name__ == "__main__":
+    main()
+```
+
+Key substitutions table:
+
+| Bash idiom | Python equivalent |
+|---|---|
+| `$(cmd)` / backtick | `subprocess.run(cmd, capture_output=True).stdout.strip()` |
+| `pipe \| cut -d= -f2` | Parse `stdout` with `.split()` or regex |
+| `kill -HUP "$PID"` | `subprocess.run(["kill", "-HUP", str(pid)], check=True)` |
+| `exit 1` | `sys.exit(1)` |
+| `date '+%Y-%m-%d'` | `datetime.now().strftime('%Y-%m-%d')` |
+| `[ -n "$VAR" ]` | `if var is not None and var.strip():` |
+
+### Pitfalls
+
+- **`sys.executable` is hardcoded** — the scheduler uses `subprocess.run([sys.executable, str(path)])` on line 596 of `cron/scheduler.py`. There is no shebang detection or shell fallback. Do NOT try to work around this by calling `bash /path` from within a Python script — just write pure Python.
+- **No environment inheritance** — scripts run with the cron scheduler's environment, which may differ from your interactive shell. Use absolute paths and export any needed env vars in the job prompt.
+- **Timeout applies** — default script timeout is 120 seconds (configurable via `HERMES_CRON_SCRIPT_TIMEOUT` env var or `cron.script_timeout_seconds` in config.yaml).
+- **Scripts must live in `HERMES_HOME/scripts/`** — the scheduler validates that the resolved script path is within `~/.hermes/scripts/` and rejects anything outside.

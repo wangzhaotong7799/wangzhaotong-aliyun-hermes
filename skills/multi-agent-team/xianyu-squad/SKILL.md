@@ -1,7 +1,7 @@
 ---
 name: xianyu-squad
 description: 闲鱼倒卖小队 — 多Agent全流程：选品侦察→利润算账→策略定价→自动上架→运营跟单→复盘优化
-version: 1.0.0
+version: 1.1.0
 author: 元宝
 tags: [xianyu, reselling, multi-agent, ecommerce, automation]
 toolsets_required: ['web', 'terminal', 'file', 'delegation']
@@ -21,6 +21,8 @@ links:
     - strategist: 军师 — 策略军师
     - scribe: 执笔 — 上架写手
     - flyer: 飞飞 — 运营管家
+  quick_start:
+    - references/phased-launch-plan.md: 4天启动计划（含验收标准）
 ---
 
 # 🏪 闲鱼小队 v1.0 — 闲鱼倒卖全自动工作流
@@ -38,6 +40,21 @@ links:
 4. **真实描述** — 商品描述不能夸大，不能用"原单""代工厂"等违规词
 5. **数据驱动** — 所有选品决策基于数据，不拍脑袋
 6. **安全第一** — 一机一号，不用公共WiFi操作，不点陌生链接
+
+---
+
+## 🚀 Quick Start — 4天启动（主人在线配合）
+
+> 本小队设计为**人机协作模式**。启动前务必先读 `references/phased-launch-plan.md` 获取完整的分日执行脚本。
+> 
+> 核心分工：🤖 我做分析/文案/利润计算 → 👤 主人做手机查价/APP上架/回复买家
+>
+> | 日期 | 阶段 | 主人投入 | 验收标准 |
+> |:----:|:----|:--------:|:--------|
+> | Day 1 | 选品侦察 | 1小时 | 产生选品池+利润排行Top10 |
+> | Day 2 | 首单上架 | 1.5小时 | 3个商品已上线 |
+> | Day 3 | 运营跟单 | 30分钟 | 出首单/收到首个咨询 |
+> | Day 4 | 复盘放大 | 30分钟 | 流程自动化+稳定运营 |
 
 ---
 

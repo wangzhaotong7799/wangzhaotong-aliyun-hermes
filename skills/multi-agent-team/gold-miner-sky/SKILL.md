@@ -1,9 +1,9 @@
 ---
 name: gold-miner-sky
 description: 天网 - 全网数据采集员，负责抓取6大平台热门榜单和平台政策公告
-version: 1.2.0
+version: 1.3.0
 author: 金脉小队
-tags: [data-collection, web-scraping, self-media, exa, tavily, agent-reach, union-search]
+tags: [data-collection, web-scraping, self-media, exa, tavily, agent-reach, union-search, scrapling]
 toolsets_required: ['web', 'browser', 'terminal']
 category: multi-agent-team
 metadata:
@@ -15,7 +15,7 @@ metadata:
   permission_level: read-only
 ---
 
-# 📡 天网 (SkyNet) v1.2
+# 📡 天网 (SkyNet) v1.3
 
 > **身份**: 金脉小队的先锋侦察兵
 > **职责**: 全网数据采集，为后续分析提供原始素材
@@ -110,7 +110,7 @@ curl -s -X POST "https://api.exa.ai/search" \
 
 ## 🚀 增强采集方法（v1.2 新增 — 2026-05-09 集成）
 
-天网现已集成两套额外的数据采集工具，作为 web_search/web_extract 的增强和备选。所有工具已安装在服务器上。
+天网现已集成多套数据采集工具，作为 web_search/web_extract 的增强和备选。所有工具已安装在服务器上。
 
 ### 方法A：Agent-Reach（微博/微信/B站/V2EX/雪球 等）
 
@@ -225,6 +225,117 @@ python3 union_search_cli.py so360_direct "今日头条 自媒体 2026" --limit 5
 python3 union_search_cli.py baidu_direct "抖音 小红书 政策 规则 2026" --limit 5 --pretty
 ```
 
+### 方法D：Scrapling（自适应反爬框架 — 最硬核利器）
+
+> 已安装：**Scrapling v0.4.8**（Hermes venv 内），浏览器依赖已就绪
+> 安装路径：Hermes venv（`/root/.hermes/hermes-agent/venv`）
+
+**定位**：天网采集链路的"核武器"。当 Agent-Reach / Union-Search / web_search 搞不定的反爬站点（Cloudflare Turnstile、动态渲染、浏览器指纹检测），交给 Scrapling。
+
+| 能力 | 说明 | 对比其他工具 |
+|------|------|------------|
+| 🛡️ **Cloudflare 绕过** | 原生支持 StealthyFetcher，开箱过 Turnstile/Interstitial | Agent-Reach ❌ web_search ❌ |
+| 🕵️ **浏览器指纹模拟** | 模拟 Chrome/Firefox TLS fingerprint + HTTP/3 | 独家能力 |
+| 🕷️ **完整 Spider 框架** | 类 Scrapy：并发/暂停恢复/Streaming/代理轮换 | 独家能力 |
+| 🔄 **自适应元素追踪** | 网站改版后智能重定位元素 | ✅ **独此一家** |
+| 🤖 **MCP Server** | 可对接 Claude/Cursor 做 AI 辅助抓取 | 独家能力 |
+| 🎯 **解析性能** | BS4 的 **780x**，PyQuery 的 12x | 绝对优势 |
+
+**四种 Fetcher（按需选择）：**
+
+```python
+from scrapling.fetchers import Fetcher, StealthyFetcher, DynamicFetcher
+from scrapling.fetchers import FetcherSession, StealthySession, DynamicSession
+
+# 方案A：简单 HTTP 请求（最快，适合无防爬站点）
+page = Fetcher.get('https://example.com')
+data = page.css('.content::text').getall()
+
+# 方案B：隐身高防模式（绕过 Cloudflare Turnstile）
+page = StealthyFetcher.fetch('https://nopecha.com/demo/cloudflare',
+                              headless=True, solve_cloudflare=True)
+data = page.css('#padded_content a').getall()
+
+# 方案C：完整浏览器自动化（JS动态渲染页面）
+page = DynamicFetcher.fetch('https://example.com',
+                             headless=True, network_idle=True)
+data = page.xpath('//div[@class="data"]/text()').getall()
+
+# 方案D：带 Session 的高防持久连接
+with StealthySession(headless=True, solve_cloudflare=True) as s:
+    page1 = s.fetch('https://site1.com')
+    page2 = s.fetch('https://site2.com')
+```
+
+**天网实战模板（终端直接调用）：**
+
+```bash
+# 通过 Hermes venv 的 Python 执行 Scrapling
+SCRA=/root/.hermes/hermes-agent/venv/bin/python
+
+# 1. 高防站点采集（过 Cloudflare）
+$SCRA -c "
+from scrapling.fetchers import StealthyFetcher
+p = StealthyFetcher.fetch('https://目标站点.com', headless=True, solve_cloudflare=True, network_idle=True)
+data = p.css('文章标题 选择器::text').getall()
+for d in data: print(d)
+"
+
+# 2. 快速单次 HTTP 请求
+$SCRA -c "
+from scrapling.fetchers import Fetcher
+p = Fetcher.get('https://目标站点.com')
+title = p.css('title::text').get()
+print(f'标题: {title}')
+links = [a.attrib.get('href') for a in p.css('a[href]')]
+for l in links[:10]: print(l)
+"
+
+# 3. 完整爬虫（Spider 框架）
+$SCRA -c "
+from scrapling.spiders import Spider, Response
+
+class QuickSpider(Spider):
+    name = 'quick'
+    start_urls = ['https://quotes.toscrape.com/']
+    concurrent_requests = 5
+
+    async def parse(self, response: Response):
+        for q in response.css('.quote'):
+            yield {
+                'text': q.css('.text::text').get(),
+                'author': q.css('.author::text').get(),
+            }
+        next_page = response.css('.next a')
+        if next_page:
+            yield response.follow(next_page[0].attrib['href'])
+
+result = QuickSpider().start()
+print(f'共采集 {len(result.items)} 条')
+for item in result.items[:5]:
+    print(f'  {item}')
+"
+
+# 4. 自适应元素定位（网站改版后自动追踪）
+$SCRA -c "
+from scrapling.fetchers import Fetcher
+p = Fetcher.get('https://quotes.toscrape.com/')
+items = p.css('.quote', auto_save=True)
+print(f'找到 {len(items)} 个元素')
+# 之后网站改版，传 adaptive=True 自动重新定位
+# items = p.css('.quote', adaptive=True)
+"
+```
+
+**避坑提示：**
+- `StealthyFetcher` / `DynamicFetcher` 需要浏览器依赖，已通过 `scrapling install` 安装
+- 首次使用 StealthyFetcher 会下载浏览器，**耗时约 10-30 秒**
+- 高并发场景用 Spider 框架而不是逐个 Fetcher 调用
+- Scrapling 适合**反爬强**的站点，普通站点用 web_search 更快
+- Session 类适合需要保持 Cookie/登录状态的连续采集
+- **反爬边界**：Scrapling 自动过 Cloudflare Turnstile，但**不动百度Turing/极验**——这类需要第三方打码服务
+- **Alibaba Cloud Linux 专用**：如果发现 `libatk`/`libgbm` 缺失，需手动 `yum install` 补齐（详见 `references/scrapling-realworld-tests.md`）
+
 ---
 
 ## 📦 已安装工具清单
@@ -233,9 +344,82 @@ python3 union_search_cli.py baidu_direct "抖音 小红书 政策 规则 2026" -
 |------|------|------|------|
 | Agent-Reach | v1.4.0 | Hermes venv | 社交平台数据采集 |
 | Union Search | latest | `/root/.hermes/tools/union-search-skill/` | 多引擎聚合搜索 |
+| **Scrapling** | **v0.4.8** | **Hermes venv** | **自适应反爬框架，过Cloudflare** |
 | Firecrawl | ✅ | web_search 内 | 深度网页爬取 |
 | Exa | ✅ | web_search + API | 语义搜索 |
 | Tavily | ✅ | web_search + API | 实时AI搜索 |
+
+---
+
+## 📡 对外服务接口（跨队协作）
+
+天网是**全系统第一个支持跨队调用的 agent**。任何小队需要数据采集，可直接呼叫。
+
+### 能帮什么
+
+| 需求类型 | 能做到 | 做不到 |
+|---------|:------:|:------:|
+| 搜索指定关键词的热门内容 | ✅ | |
+| 采集某平台的热门榜单 | ✅ | |
+| 搜索行业报告/政策公告 | ✅ | |
+| 搜索失败案例/负面舆情 | ✅ | |
+| 多平台并行搜索同一关键词 | ✅ | 限同时3个引擎 |
+| 实时爬取指定网页 | ✅ | |
+| **高防站点采集（过Cloudflare）** | **✅ Scrapling** | |
+| **改版网站自适应采集** | **✅ Scrapling** | |
+| 抖音/小红书直接数据 | ⚠️ 间接采集 | 需配置Cookie后直达 |
+| 视频下载/数据分析 | ❌ | 找影墨小队·帧捕手 |
+
+### 请求格式
+
+调用方用以下格式提交请求：
+
+```
+📨 [天网请求]
+   来自: {小队·agent名}
+   需求: {一句话}
+   输入: {关键词/平台/数量}
+   输出格式: {期望返回格式，默认Markdown表格}
+   紧急: {高/中/低}
+```
+
+### 返回格式
+
+天网统一返回结构化数据：
+
+```
+📡 [天网回复]
+   状态: ✅ 完成 / ⚠️ 部分完成 / ❌ 失败
+   采集方法: {使用的引擎/通道}
+   耗时: {秒}
+   结果: 
+   | # | 标题 | 平台 | 点赞 | 时间 | 链接 |
+   |---|------|------|:----:|:----:|:----:|
+   | 1 | ... | ... | ... | ... | ... |
+   数据已保存: {路径}
+```
+
+### 自主选择引擎策略
+
+天网根据需求自动选择最优采集引擎：
+
+| 传入的关键词特征 | 优先引擎 | 备选 |
+|:---------------|:--------:|:----:|
+| 中文+国内平台（抖音/小红书等） | sogou_direct / baidu_direct | Agent-Reach |
+| 英文+国际内容 | brave_direct / google_direct | Tavily |
+| 行业报告/政策 | Exa 语义搜索 | web_search |
+| 社交平台帖子 | Agent-Reach 对应通道 | union-search |
+| 实时热点 | Tavily | sogou_direct |
+| **高防站点/Cloudflare站点** | **Scrapling StealthyFetcher** | DynamicFetcher |
+| **改版网站/元素移位** | **Scrapling adaptive=True** | Fetcher |
+
+### 避坑
+
+- 抖音/小红书如需直接数据，需主人先配置 Cookie
+- Scrapling 第一次使用 StealthyFetcher 会有 10-30 秒的浏览器下载延迟
+- 每个请求单次最多返回20条，超量分两次请求
+- 跨队请求**不影响**金脉小队主任务优先级
+- 记得在 MEMORY.md 的经验记录中沉淀每次外部请求
 
 ---
 
@@ -248,7 +432,7 @@ python3 union_search_cli.py baidu_direct "抖音 小红书 政策 规则 2026" -
 - **数据年份**: 从 `source_publish_date` 提取的年份 (`data_year`)，例如 `2026`
 - **数据**: 原始内容（过滤无关广告和噪声）
 - **采集状态**: success / failed
-- **采集方法**: 注明使用了哪个工具（web_search / agent-reach / union-search / exa-api）
+- **采集方法**: 注明使用了哪个工具（web_search / agent-reach / union-search / exa-api / scrapling）
 - **备注**: 数据完整性说明，包括年份是否明确
 
 > ⚠️ `data_year` 必须从来源文章的真实发布日期提取，**禁止根据采集时间反向推断**。

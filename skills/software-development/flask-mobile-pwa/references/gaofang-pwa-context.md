@@ -46,6 +46,7 @@ static/mobile/
 ### 复诊 (page-followup.js)
 - IIFE 模式，Router.register('followup', render)
 - 2 个 tab: [待复诊] [已完成] — **注意用后端识别的值 '待复诊'/'已复诊'**
+- **必须传 `limit: 50`**，否则后端返回全部 3000+ 条记录（4.4MB），手机浏览器崩溃显示「加载失败」
 - **卡片字段顺序：** 患者姓名 → 代煎号 → **医助** → 复诊状态 → 最近取药日期 → 回访次数
 - 卡片含 `data-pid`(代煎号) 和 `data-id`(数据库ID) 属性
 - 更新时传 `patient_id`(数据库ID), `status`, `follow_up_number`

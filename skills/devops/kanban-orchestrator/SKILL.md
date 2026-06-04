@@ -25,6 +25,25 @@ Create Kanban tasks when any of these are true:
 
 If *none* of those apply — it's a small one-shot reasoning task — use `delegate_task` instead or answer the user directly.
 
+### Kanban vs delegate_task: Decision Matrix
+
+| Criterion | `delegate_task` | Kanban Board | When to choose |
+|-----------|:---------------:|:------------:|----------------|
+| **Persistence** | ❌ Session-only, lost on interrupt | ✅ SQLite, survives crash/restart | Needed for long-running or retry-tolerant work |
+| **DAG dependencies** | ❌ Must hand-code | ✅ `parents=[...]` auto-gate | Complex multi-stage pipelines (A+B→C→D+E) |
+| **Human-in-the-loop** | ❌ No block mechanism | ✅ `kanban_block(reason)` + `/unblock` | When intermediate decisions need human judgement |
+| **Audit trail** | ❌ Lost after session end | ✅ Full lifecycle in SQLite | Compliance, repro, post-mortem |
+| **Fan-out parallelism** | ✅ Concurrent sub-calls | ✅ Independent workers | Both work; Kanban is better for long-running parallel tasks |
+| **Setup complexity** | ✅ Zero config | ⚠️ Requires profile config + skill install | Choose Kanban when the task complexity justifies the setup |
+| **Cross-session** | ❌ Same session only | ✅ Workers survive user switching context | User leaves and comes back hours later |
+
+**Rule of thumb**: If the pipeline has 3+ stages with dependencies, use Kanban. If it's a linear 4-stage pipe that runs headless (no human review), `delegate_task` is simpler and sufficient. Migrate when persistence or blocking becomes a pain point.
+
+**Migration trigger signals** (move from delegate_task to Kanban when any fires):
+1. Cron tasks occasionally interrupted mid-run causing data loss
+2. Pipeline needs manual review/validation at intermediate stages
+3. Tasks need to run for hours across multiple user sessions
+
 ## The anti-temptation rules
 
 Your job description says "route, don't execute." The rules that enforce that:

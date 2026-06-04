@@ -1,7 +1,7 @@
 ---
 name: team-architect
 description: 多智能体团队组建标准化工作流 — 架构优先、三大件完备、技能可叠加、记忆可沉淀
-version: 1.0.0
+version: 1.1.0
 author: wangzhaotong7799
 tags: [multi-agent, team-building, architecture, organization]
 toolsets_required: ['terminal', 'file']
@@ -480,6 +480,7 @@ tags: [multi-agent, team-management, agent-personality]
 | 文件 | 内容 | 加载方式 |
 |------|------|---------|
 | `references/user-work-rules.md` | 主人工作铁则（所有agent通用） | `skill_view('team-architect', 'references/user-work-rules.md')` |
+| `references/batch-creation-tools.md` | 批量创建agent的自动化脚本使用指南（吸收自 batch-create-subagents） | `skill_view('team-architect', 'references/batch-creation-tools.md')` |
 
 **新手须知**：每次调用本技能或启动新团队前，先加载 user-work-rules.md，确保所有agent理解「所有操作必须请示」的铁律。
 
@@ -557,6 +558,140 @@ done
 | 总指挥不知道该找谁 | 名册没更新 | 更新 roster/SKILL.md 成员档案表 |
 | 记忆文件编造经验 | 建队时偷懒 | 删除伪造记录，经验只能来自真实工作 |
 | 新旧版本冲突 | 旧脚本被覆盖 | 建新文件不覆盖，原名加 `_v2` |
+
+---
+
+## 阶段八：Agent 能力增强（为现有 Agent 添加新工具/技能）
+
+> 适用场景：现有 agent 需要扩展新的数据源、反爬能力、API 接口等。不是新建 agent，而是给老 agent 加新本事。
+
+### 8.1 标准流程
+
+```
+主人提出需求 → 调研工具 → 安装验证 → SKILL.md 集成 → 接口更新 → 记忆沉淀
+```
+
+### 8.2 详细步骤
+
+#### Step 1：调研确认
+
+先搞清楚工具/库是什么、能干什么、怎么用：
+
+```markdown
+- GitHub 仓库信息（Stars、Forks、语言、许可、版本）
+- 核心能力清单（能与不能）
+- 与现有工具的对比优势（为什么需要它）
+- 安装依赖和系统要求
+```
+
+**输出**：一份调研简报交给主人确认。
+
+#### Step 2：安装与验证
+
+```bash
+# 安装到 Hermes 虚拟环境
+/root/.hermes/hermes-agent/venv/bin/python -m pip install {package}
+
+# 如果涉及浏览器/系统依赖
+/root/.hermes/hermes-agent/venv/bin/python -c "from {module} import ..."
+
+# 功能验证
+/root/.hermes/hermes-agent/venv/bin/python -c "
+# 导入测试
+from {module} import {class}
+# 基本功能测试
+result = {function_call}
+assert result is not None
+print('✅ {tool_name} 安装并验证通过')
+"
+```
+
+> ⚠️ 如果工具依赖浏览器（Playwright/Puppeteer 等），安装后还需要运行浏览器依赖安装命令。
+
+#### Step 3：SKILL.md 集成
+
+在目标 agent 的 SKILL.md 中做以下修改：
+
+| 修改项 | 说明 | 示例 |
+|--------|------|------|
+| **版本号** | 递增主版本号 | `v1.2.0 → v1.3.0` |
+| **tags** | 添加新工具标签 | `[..., scrapling]` |
+| **新增采集方法章节** | SOP 中增加新的方法章节 | `### 方法D：Scrapling` |
+| **工具清单** | 更新已安装工具表 | `\| Scrapling \| v0.4.8 \| Hermes venv \| 自适应反爬 \|` |
+| **对外服务接口** | 更新跨队协作能力表 | `\| 高防站点采集 \| ✅ Scrapling \|` |
+| **引擎策略表** | 新增匹配规则 | `\| 高防站点 \| Scrapling StealthyFetcher \|` |
+| **输出格式** | 更新采集方法枚举 | `web_search / agent-reach / scrapling` |
+
+**新方法章节的标准结构**：
+
+```markdown
+### 方法{N}：{工具名}（{一句话定位}）
+
+> 已安装：**{工具名 v版本}**（Hermes venv 内）
+> 安装路径：`/root/.hermes/hermes-agent/venv`
+
+**定位**：一句话说明这个工具解决什么痛点、什么时候用它。
+
+**核心能力对比表**：
+
+| 能力 | 说明 | 对比其他工具 |
+|------|------|------------|
+| 🛡️ **能力1** | 具体能做到什么 | 现有工具能不能做 |
+
+**常用模板（终端可复制执行）：**
+
+```bash
+# 通过 Hermes venv 的 Python 执行
+SCRA=/root/.hermes/hermes-agent/venv/bin/python
+
+# 用法示例1
+$SCRA -c "..." 
+
+# 用法示例2
+$SCRA -c "..."
+```
+
+**避坑提示：**
+- 已知的依赖问题
+- 性能/延迟特性
+- 适用边界（什么时候不用它）
+```
+
+#### Step 4：记忆沉淀
+
+更新目标 agent 的 MEMORY.md：
+
+```markdown
+### 工具集成记录
+
+- **日期**: {YYYY-MM-DD}
+- **新增工具**: {工具名 v版本}
+- **安装路径**: `/root/.hermes/hermes-agent/venv`
+- **用途**: {一句话}
+- **集成方法**: 在 SKILL.md 中新增了方法{N}章节
+- **注意事项**: {已知坑点}
+```
+
+### 8.3 实际案例：Scrapling 集成进天网
+
+> 参考 gold-miner-sky v1.2 → v1.3 的升级（SKILL.md 中有完整实现）。
+
+| 步骤 | 操作 | 产出 |
+|:----:|------|------|
+| 1 | 调研 Scrapling（GitHub 54k Stars，Cloudflare 绕过） | 调研简报 |
+| 2 | pip install "scrapling[all]" + browser deps | 安装验证通过 |
+| 3 | 更新 gold-miner-sky SKILL.md（v1.2→v1.3） | 新增方法D章节 |
+| 4 | 更新工具清单、对外接口、引擎策略表 | 全面覆盖 |
+| 5 | 写 Scrapling 使用模板（4种 Fetcher + 实战命令） | 复制即用 |
+
+### 8.4 常见陷阱
+
+| 陷阱 | 症状 | 解决 |
+|:----:|------|------|
+| **只装不记** | 工具装好了但下次忘在哪里 | 更新 MEMORY.md 记录安装路径 |
+| **缺浏览器依赖** | StealthyFetcher 报错 | 运行 `scrapling install` 或 `playwright install` |
+| **只改一处** | SKILL.md 正文更新了但对外接口没改 | 逐项检查工具清单/对外接口/引擎策略 |
+| **版本号不升** | 看不出技能有更新 | 每次能力增强至少升次版本号 |
 
 ---
 

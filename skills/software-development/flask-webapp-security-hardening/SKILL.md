@@ -1,12 +1,14 @@
 ---
 name: flask-webapp-security-hardening
-description: Flask Web 应用安全加固和现代化改造指南 - 包含评估、加固步骤、常见陷阱
-version: 1.0.0
+description: "Flask Web 应用安全加固 + JWT 角色权限管理 — 评估、加固、访问控制、前端集成"
+version: 1.1.0
 author: Hermes Agent
-tags: [flask, security, hardening, modernization, python]
+tags: [flask, security, hardening, modernization, python, jwt, role, access-control, auth]
 toolsets_required: ['terminal', 'file']
 category: software-development
 metadata:
+  hermes:
+    tags: [flask, security, hardening, modernization, python, jwt, role, access-control, auth]
   applicability: production-flask-apps
   priority: high
   estimated_effort: 1-2 weeks
@@ -95,7 +97,64 @@ def generate_token(user_id, username, roles):
     return str(token)  # 最终确保是 str 类型
 ```
 
-**注意**：不要在 app.py 中重复对 token 调用 str()，这会产生 `'b\'...\''` 这种错误格式。
+**注意**：不要在 app.py 中重复对 token 调用 str()，这会产生 `'b\\'...\\''` 这种错误格式。
+
+---
+
+### 1b. JWT 角色权限管理（RBAC）
+
+> **吸收自 `flask-jwt-role-access`**
+
+当需要不同用户看到不同数据（行级权限）、某些端点只对特定角色开放、或添加受限角色（如只读游客）时，使用 RBAC 模式。
+
+#### 后端实现
+
+**Step 1 — JWT Token 中加入角色字段：**
+```python
+def generate_token(user_id, username, roles):
+    payload = {
+        'user_id': user_id, 'username': username,
+        'roles': roles,  # 如 ['guest'] 或 ['assistant', 'admin']
+        'exp': datetime.utcnow() + timedelta(hours=24)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+```
+
+**Step 2 — 角色检测辅助函数：**
+```python
+def _has_role(role_name):
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    payload = verify_token(token)
+    if payload and role_name in payload.get('roles', []):
+        return True
+    return False
+```
+
+**Step 3 — 基于角色的数据过滤（行级权限）：**
+```python
+query = session.query(PrescriptionRecord)
+if _has_role('guest'):
+    query = query.filter(PrescriptionRecord.status == '未取')
+```
+
+**Step 4 — 端点级访问拦截：**
+```python
+if _has_role('guest'):
+    return jsonify({"error": "游客无权访问"}), 403
+```
+
+#### 关键陷阱
+
+- **Gunicorn 缓存不一致**：修改角色逻辑后必须清 __pycache__ 并 `fuser -k <port>/tcp` 重启
+- **角色叠加**：SQLAlchemy filter 默认 AND 叠加，需要互斥时用 `if/elif` 控制流
+- **搜索参数不应按角色封锁**：搜索/筛选权限与数据查看权限是两码事
+
+#### 引用文件
+
+| File | Content |
+|------|---------|
+| `references/flask-jwt-frontend-integration.md` | 完整前端集成（路由守卫、UI隐藏、字段级控制、guest login API） |
+| `references/user-role-permission-debug.md` | 角色/权限表为空导致 403 的排查 |
 
 ---
 
@@ -381,3 +440,15 @@ pytest --cov=. --cov-report=html
 *最后更新*: 2026-04-23  
 *作者*: Hermes Agent  
 *适用项目*: Flask Web 应用安全加固
+
+---
+
+## Absorbed Skills
+
+The following former standalone skills have been consolidated into this umbrella.
+Their content is preserved as reference files:
+
+| Former Skill | Reference File | Content Summary |
+|:---|---|:---|
+| `flask-jwt-role-access` | `references/flask-jwt-frontend-integration.md` | JWT roles in token, guest login endpoint, frontend Store/Api/router integration, UI field-level visibility per role |
+| `flask-user-role-permission-debug` | `references/user-role-permission-debug.md` | Empty permissions table diagnosis, debug queries for missing role-permission mappings |

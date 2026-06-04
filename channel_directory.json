@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-05-11T07:37:35.267409",
+  "updated_at": "2026-06-04T21:33:49.298716",
   "platforms": {
     "telegram": [],
     "discord": [],
@@ -12,6 +12,7 @@
     "email": [],
     "sms": [],
     "dingtalk": [],
+    "msgraph_webhook": [],
     "feishu": [
       {
         "id": "oc_10d032f2e5b7b86d660945627d981888",
@@ -24,6 +25,24 @@
         "name": "用户657799",
         "type": "group",
         "thread_id": null
+      },
+      {
+        "id": "oc_7404e0fa8470ca3e7f04d614b806fdaf",
+        "name": "my-hermes agent",
+        "type": "group",
+        "thread_id": null
+      },
+      {
+        "id": "oc_10d032f2e5b7b86d660945627d981888:om_x100b6ee09397b8a8c21ae37c1ac7226",
+        "name": "oc_10d032f2e5b7b86d660945627d981888 / topic om_x100b6ee09397b8a8c21ae37c1ac7226",
+        "type": "dm",
+        "thread_id": "om_x100b6ee09397b8a8c21ae37c1ac7226"
+      },
+      {
+        "id": "oc_10d032f2e5b7b86d660945627d981888:om_x100b6ece21cd8c84c3dc2d34badc05c",
+        "name": "oc_10d032f2e5b7b86d660945627d981888 / topic om_x100b6ece21cd8c84c3dc2d34badc05c",
+        "type": "dm",
+        "thread_id": "om_x100b6ece21cd8c84c3dc2d34badc05c"
       }
     ],
     "wecom": [],
@@ -32,7 +51,11 @@
     "bluebubbles": [],
     "qqbot": [],
     "yuanbao": [],
+    "google_chat": [],
     "irc": [],
+    "line": [],
+    "ntfy": [],
+    "simplex": [],
     "teams": []
   }
 }

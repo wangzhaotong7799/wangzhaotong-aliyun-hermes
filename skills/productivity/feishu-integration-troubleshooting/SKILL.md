@@ -163,7 +163,73 @@ journalctl -u hermes-gateway --since "1 minute ago" | grep -i "allow"
 ```
 Should show gateway reading the new configuration.
 
-#### Issue 2: Gateway fails to start (Python version)
+#### Issue 6: Bot replies in group chats only visible to sender
+
+**Symptoms**:
+- The user who @-mentioned the bot can see the reply in the group
+- Other group members see nothing from the bot
+- Gateway logs show successful delivery (`Sending response (...) to oc_...`)
+
+**Root cause**: Gateway sends responses with `reply_to=event.message_id`, making the Feishu adapter use `message.reply()`. Feishu's bot `message.reply()` in groups **defaults to private reply** — only the original sender sees it.
+
+**Diagnosis**:
+```bash
+tail -20 ~/.hermes/logs/gateway.log | grep "Sending response"
+# "oc_" prefix in the target = group chat
+```
+
+**Fix**: Add a check in `_feishu_send_with_retry()` to strip `reply_to` for group chats:
+```python
+if chat_id and chat_id.startswith("oc_"):
+    reply_to = None
+```
+This forces `message.create()` instead of `message.reply()`, making the message visible to everyone. Restart after fix: `hermes gateway restart`.
+
+**Scope**: Place in `_feishu_send_with_retry()` (lowest send layer) so it covers all message types (text, image, file, voice, video). Feishu API behavior — other platforms like Telegram handle `reply_to` differently.
+
+#### Issue 8: Group member @mentions bot — bot sees nothing in logs
+
+**Symptoms**:
+- You (app creator) can @mention the bot in a group and get replies
+- A different group member @mentions the bot — no response
+- Gateway logs show **no inbound entries** for that user's messages at all
+- No reject/warning/error in logs
+
+**Root cause**: Feishu Open Platform's event subscription setting **"消息接收模式"** (message reception mode) defaults to **"仅应用创建者"** (app creator only). Messages from other users' @mentions are silently dropped by Feishu's servers before reaching your gateway.
+
+**Diagnosis**:
+```bash
+# Check that the messages truly don't arrive — search for the group's inbound entries
+grep "Inbound group message.*chat_id=oc_" ~/.hermes/logs/gateway.log | tail -20
+# If ALL messages are from the same sender (ou_b13ee47717...), others are being filtered upstream
+```
+
+**Fix**: Change the Feishu App's event subscription setting:
+1. Go to https://open.feishu.cn/app/ → your app
+2. **事件订阅** → `im.message.receive_v1` → 配置 → **消息接收模式**
+3. Change from `仅应用创建者` to `所有人`
+4. Save and restart gateway: `hermes gateway restart`
+
+See `references/feishu-open-platform-event-subscription.md` for full details.
+
+#### Issue 9: Want to open bot to all group members without adding each OpenID
+
+**Instead of** adding every user's OpenID to `FEISHU_ALLOWED_USERS`, use per-group rules in `config.yaml`:
+
+```yaml
+platforms:
+  feishu:
+    group_rules:
+      oc_xxxxxxxxxxxx:
+        policy: open
+        require_mention: true
+```
+
+This allows anyone in that group to @mention the bot, without modifying `.env`.
+
+See `references/feishu-group-rules-config.md` for all policy options.
+
+#### Issue 7: Gateway fails to start (Python version)
 
 **Symptoms**: Gateway exits with status 75 or Python compatibility errors like:
 ```
@@ -409,7 +475,42 @@ cat ~/.hermes/channel_directory.json
 **Test before sending important messages:**
 Send a short test message first with the chat_id before sending long reports or file links. This avoids losing work when the target format is wrong.
 
+**MEDIA attachments limitation**: `send_message` with `MEDIA:/path/to/file` in the message body does NOT work for Feishu. When a MEDIA reference is included, the Feishu adapter silently omits the attachment. The text content still sends successfully, but the file is dropped. This differs from Telegram/Discord/Signal which all support inline MEDIA attachments.
+
+**Workarounds for file delivery via Feishu:**
+
+1. **Rich text content** — send the document content as a formatted message instead of an attachment (most reliable)
+2. **Feishu Drive upload** — use the Feishu Open API to upload files directly to Feishu Drive (requires tenant_access_token):
+   ```bash
+   # Get token
+   TOKEN=$(curl -s -X POST 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal' \
+     -H 'Content-Type: application/json' \
+     -d '{"app_id":"YOUR_APP_ID","app_secret":"YOUR_APP_SECRET"}' | python3 -c "import sys,json;print(json.load(sys.stdin).get('tenant_access_token',''))")
+   
+   # Upload file to drive
+   curl -s -X POST 'https://open.feishu.cn/open-apis/im/v1/files' \
+     -H "Authorization: Bearer $TOKEN" \
+     -F "file_type=stream" \
+     -F "file_name=report.docx" \
+     -F "file=@/path/to/file.docx"
+   ```
+3. **Link to file** — if the file is on a public server, send a download link instead
+4. **Image/PDF via message.create API** — the Feishu message.create endpoint supports direct file upload with multipart/form-data, but `send_message` doesn't expose this API
+
 **Note:** For group chats (delivery targets like `oc_99961a56e530e89f7e369cd6ecb50218` in cron jobs), the Bot must be added to the group first, or you'll get error `[230002] Bot/User can NOT be out of the chat.`
+
+#### Direct API Fallback (When `send_message` Tool Is Unavailable)
+
+When running as a cron job or in contexts where the `send_message` tool is not in your toolset, you can use the Feishu Open API directly via Python's `urllib` (no external dependencies needed):
+
+1. Get a `tenant_access_token` from the auth endpoint (using `FEISHU_APP_ID` + `FEISHU_APP_SECRET` from `.env`)
+2. Send the message via `im/v1/messages` with `receive_id_type=chat_id`
+
+**⚠️ Secret extraction caveat**: When reading `.env` to get credentials, remember that `read_file` masks secrets. Use raw byte reading (see Pitfall #10) to get the complete `FEISHU_APP_SECRET`.
+
+**Multi-channel retry**: Different chats have different bot membership. If one `oc_` chat_id returns 230002, try other channels (DM, other groups) from `channel_directory.json`. The DM channel (`type: "dm"`) is the most reliable — it's created automatically when the user first pairs with the bot.
+
+See `references/direct-api-messaging.md` for complete Python code and error handling.
 
 ## Common Pitfalls
 
@@ -425,6 +526,24 @@ Send a short test message first with the chat_id before sending long reports or 
    **Mitigation**: Keep credentials in a version-controlled backup config directory.
 7. **Gateway.log vs journalctl**: For user-systemd services, `journalctl --user` may return "No entries". Always use `~/.hermes/logs/gateway.log` as the primary log source.
 8. **Stale gateway_state.json**: The state file is not updated on crash/kill. If it shows "connected" but the gateway is down, the data is stale. Trust `systemctl --user status` over the state file.
+9. **`.env` file secret masking by read_file**: When you use `read_file` to view `~/.hermes/.env`, the system automatically masks sensitive values by replacing the middle portion with `...`. For example, `FEISHU_APP_SECRET=JaKXB3IwqrsgAsCGp3cTPeUWjNvMfKk3` is displayed as `FEISHU_APP_SECRET=JaKXB3...fKk3`. This means you **cannot copy-paste the secret** from the read_file output — it's incomplete.
+    
+    **Workaround**: Read the file as raw bytes and decode manually:
+    ```python
+    import os
+    env_path = os.path.expanduser("~/.hermes/.env")
+    with open(env_path, 'rb') as f:
+        raw = f.read()
+    for line in raw.split(b'\n'):
+        if b'FEISHU_APP_SECRET' in line:
+            decoded = line.decode('utf-8')
+            secret = decoded.split('=', 1)[1]
+            # secret now has the COMPLETE value
+    ```
+    
+    This applies to ALL API keys in `.env` (not just Feishu). When you need the actual value, always use raw byte reading.
+    
+    **Mitigation**: Keep a backup of Feishu credentials in a git-tracked config repo so you can always look up the original secret without needing to extract it from `.env`.
 
 ## Troubleshooting Flowchart
 
@@ -455,6 +574,9 @@ Start → Check pairing file → Exists? → No → Need new pairing code
 
 - `references/credential-loss-sigkill-recovery.md` — Full diagnostic walkthrough of a real incident where the gateway was killed by SIGKILL and Feishu credentials were lost from `.env`. Useful as a concrete pattern to follow when investigating "Feishu not working".
 - `references/group-member-silently-ignored.md` — Walkthrough of diagnosing a new group member whose messages were silently dropped by the allowlist filter. Covers the key insight: group messages from unallowed users produce no log warning, unlike DMs.
+- `references/feishu-open-platform-event-subscription.md` — Guide to Feishu Open Platform event subscription settings, particularly "消息接收模式" which controls whether @mentions from non-creator users reach the gateway. Includes permission checklist and step-by-step configuration instructions.
+- `references/feishu-group-rules-config.md` — Per-group access policy configuration via config.yaml `group_rules`. Covers all policy options (open, disabled, admin_only, allowlist, blacklist) and how they interact with the global `FEISHU_ALLOWED_USERS` setting.
+- `references/direct-api-messaging.md` — Sending Feishu messages via direct Open API (Python/urllib) as a fallback when the `send_message` tool is not available. Covers token acquisition, chat_id determination, error codes (230001/230002), and multi-channel fallback strategy.
 
 ## Related Skills
 

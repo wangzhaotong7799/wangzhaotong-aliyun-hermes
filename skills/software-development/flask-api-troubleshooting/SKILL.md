@@ -952,6 +952,80 @@ fetchWithAuth(`${API_BASE_URL}/backups`)
 - **401 can cascade** — one endpoint 401 causes the whole modal/feature to appear broken
 - Always handle the `.catch()` with user-visible error messages, not just `console.error`
 
+### Issue 15: Empty String `''` for Nullable Date/DateTime Fields → PostgreSQL `InvalidDatetimeFormat`
+
+**Symptom**: Clicking save (e.g., editing a field like assistant name) appears to do nothing, or the frontend shows "编辑成功" but the data isn't actually saved. Server logs show `InvalidDatetimeFormat` errors.
+
+**Console/Log Evidence**:
+```
+ERROR - 更新处方记录时出错: (psycopg2.errors.InvalidDatetimeFormat) invalid input syntax for type date: ""
+LINE 1: ...SET age='71', assistant='吕秋洁', shipping_time='', patien...
+```
+
+**Root Cause Chain**:
+1. **Frontend**: When a form populates a Date input field using `record.shipping_time ? record.shipping_time.substring(0, 10) : ''`, a `null` value becomes empty string `''`
+2. **Frontend sends all fields** on submit, including `shipping_time: ""`
+3. **Backend** calls `setattr(record, 'shipping_time', '')`
+4. **PostgreSQL**: Cannot cast empty string `''` to `Date` type → raises `InvalidDatetimeFormat`
+
+**Secondary Bug — Misleading "Success"**: The frontend `.then()` handler often doesn't check the response body for an `error` field. Since `response.json()` on HTTP 500 still resolves, `.then()` fires and shows "编辑成功" even though the save failed:
+
+```javascript
+// ❌ WRONG — shows "编辑成功" even on 500 errors with error body
+.then(function(r) { return r.json(); })
+.then(function() {
+    alert('编辑成功');  // ← Shows this even when backend returned {error: "..."}
+    loadPrescriptions();
+})
+
+// ✅ CORRECT — check for error field in response
+.then(function(r) { return r.json(); })
+.then(function(result) {
+    if (result.error) {
+        alert('编辑失败: ' + result.error);
+        return;
+    }
+    alert('编辑成功');
+    loadPrescriptions();
+})
+```
+
+**Fix (Two Layers — Backend Is Mandatory)**:
+
+**Layer 1 — Backend Guard (defense-in-depth)**: Before `setattr()`, convert empty strings to `None` for all Date-type fields:
+
+```python
+# Define Date fields that must not receive empty strings
+DATE_FIELDS = {'date', 'notification_pickup_date', 'shipping_time', 'pickup_date',
+               'follow_up_1_date', 'follow_up_2_date', 'follow_up_3_date'}
+
+for json_key, model_attr in field_map.items():
+    if json_key in data:
+        val = data[json_key]
+        if val == '' and json_key == 'assistant':
+            continue  # skip empty string for non-date fields as needed
+        if val == '' and model_attr in DATE_FIELDS:
+            val = None  # ← Convert '' to None for PostgreSQL Date compat
+        setattr(record, model_attr, val)
+```
+
+**Layer 2 — Frontend Fix**: Convert empty date values to `null` instead of `''`:
+
+```javascript
+// Before (broken):
+shipping_time: shippingTime,
+
+// After (fixed):
+shipping_time: shippingTime || null,
+```
+
+This sends `null` in JSON, which Python parses as `None` — valid for a nullable Date column.
+
+**Prevention Checklist**:
+- [ ] Every nullable Date/DateTime field in the model needs backend guard
+- [ ] Every frontend submit handler should check `result.error` before declaring success
+- [ ] For Date fields populated from records: use `|| null` instead of `|| ''`
+
 **Related Pitfall: Token Stored as `token` vs `access_token`**:
 In this project, the login API returns `{"token": "eyJ0eX..."}` (field name `token`), and the frontend saves it as `localStorage.setItem('token', data.token)`. However, some frontend code or external libraries might expect `localStorage.getItem('access_token')`. Always verify the actual field name in both login response and localStorage:
 ```javascript
@@ -1145,6 +1219,156 @@ gunicorn --bind 127.0.0.1:5000 --workers 4 'app:app'
 
 ---
 
+### Issue 17: Dynamically Rebuilt <select> Dropdown Loses Selected Value
+
+**Symptom**: The main page filter (e.g., doctor dropdown) works correctly and the search API returns filtered data. But a secondary feature that reads the same dropdown value (e.g., export modal, print modal) gets an empty value and exports ALL records.
+
+**Root Cause**: When a function dynamically rebuilds a `<select>` dropdown by resetting `innerHTML` from API results, the browser automatically resets `selectedIndex` to the first option (`""`). Downstream functions that read `dropdown.value` after the rebuild get the default value, not the user's previous selection.
+
+**Symptom Differential**:
+| Behavior | Implication |
+|---|---|
+| Main page search correctly filters by dropdown X | Backend API supports the filter |
+| Export/print modals read the same dropdown but ignore it | The DOM element exists and is readable — its value has been reset |
+| Static dropdowns (status) work fine | Static dropdowns are never rebuilt → value persists |
+| Dynamic dropdowns (doctor) fail silently | Dynamic dropdowns get rebuilt on every search → selected value is lost |
+
+**Why Static vs Dynamic Matters**:
+- `filter-status` in this project is a hardcoded `<select>` with static `<option>` tags — never rebuilt, value always preserved
+- `filter-doctor` is dynamically populated from API results by `loadDoctors()` — rebuilt every search → value lost unless explicitly saved/restored
+
+**Working Pattern (from `loadAssistants()`)**:
+```javascript
+function loadDoctors(records) {
+    const select = document.getElementById('filter-doctor');
+    if (!select) return;
+    const selectedValue = select.value;  // ← SAVE before rebuild
+    const items = [...new Set(records.map(r => r.doctor).filter(Boolean))];
+    select.innerHTML = '<option value="">所有</option>';
+    items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item;
+        opt.textContent = item;
+        select.appendChild(opt);
+    });
+    // Restore previous selection if still in the list
+    if (selectedValue && items.includes(selectedValue)) {
+        select.value = selectedValue;  // ← RESTORE after rebuild
+    }
+}
+```
+
+**How to Diagnose**:
+
+1. **Verify backend filter works in isolation** with Flask test_client:
+```python
+from app import create_app
+app = create_app()
+with app.test_client() as c:
+    resp = c.post('/api/auth/login', json={'username': 'admin', 'password': 'xxx'})
+    token = resp.get_json().get('token')
+    # Test with filter
+    r = c.get('/api/prescriptions?per_page=3&doctor=某某',
+              headers={'Authorization': f'Bearer {token}'})
+    records = r.get_json()
+    doctors = set(r.get('doctor') for r in records if r.get('doctor'))
+    # If doctors == {'某某'}, backend is correct — problem is frontend
+```
+
+2. **Insert a console.log at the critical read point**:
+```javascript
+var doctorSelect = document.getElementById('filter-doctor');
+console.log('doctor value at export time:', doctorSelect.value);
+// If this logs "" despite the user selecting a doctor, value was lost by a rebuild
+```
+
+3. **Find all places that rebuild the dropdown**:
+```bash
+grep -n "innerHTML.*filter-doctor\|filter-doctor.*innerHTML" static/js/*.js
+```
+
+**Fix Checklist**:
+- [ ] Every function that rebuilds a dynamic dropdown via `innerHTML` must save/restore `selectedValue`
+- [ ] Use the same SAVE→rebuild→RESTORE pattern that the parallel function (e.g., `loadAssistants()`) already uses
+- [ ] If multiple functions rebuild the same dropdown, each one must preserve the value independently
+- [ ] Static/constant dropdowns with hardcoded `<option>` tags don't need this fix
+
+**Key Insight**: A filter that works in the main search but fails in a downstream feature (export modal, print modal) is almost always a frontend DOM lifecycle issue, not a backend API issue. When only dynamic dropdowns fail while static ones work, the root cause is almost certainly value loss during rebuild. Verify the API first, then investigate whether the DOM element's value is still what the user selected.
+
+
+### Issue 16: User Reports "加载失败" But All Server APIs Return 200 OK
+
+**Symptom**: User sees "加载失败" on a page (e.g., 复诊管理), but testing the API endpoints with curl shows all return 200 OK with valid JSON.
+
+**Root Cause**: The server is fine — the issue is on the client side. Common causes:
+1. **Browser cache of old JS/HTML** — static files get cached, old JS may have bugs
+2. **Transient network blip** — service restart caused a brief 503 window
+3. **JS runtime error** — e.g., Chart.js CDN failure, undefined variable in render loop
+4. **Large payload crashing the browser** — 4MB+ JSON without pagination can overflow mobile browsers
+
+**Debugging Protocol**:
+
+1. **Systematically test each API endpoint** — match what the frontend calls:
+```bash
+# 1. Login
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin123"}' | python3 -c "import sys,json;print(json.load(sys.stdin).get('token',''))")
+
+# 2. Test the exact URL the frontend calls (with params):
+curl -s "http://localhost:8080/api/follow-up?start_date=2026-05-12&end_date=2026-05-15" \
+  -H "Authorization: Bearer $TOKEN" \
+  -o /tmp/api_test.json \
+  -w "HTTP %{http_code} | %{size_download}bytes | %{time_total}s\\n"
+
+# 3. Validate JSON is parseable:
+python3 -c "import json; d=json.load(open('/tmp/api_test.json')); print(f'OK: {len(d)} records')"
+
+# 4. Check all related endpoints in parallel:
+for url in "assistants" "follow-up/statistics" "follow-up/ranking?start_date=2026-04-12&end_date=2026-05-12"; do
+  curl -s "http://localhost:8080/api/$url" -H "Authorization: Bearer $TOKEN" -o /dev/null \
+    -w "%{$url}: HTTP %{http_code} | %{size_download}bytes | %{time_total}s\\n"
+done
+```
+
+2. **Check server logs** (not just API responses):
+```bash
+# Gunicorn error log:
+journalctl -u gaofang-v2-fusion.service --since "5 min ago" --no-pager | grep -i error
+
+# Application log:
+tail -50 /path/to/app.log | grep -i "error\|exception"
+```
+
+3. **Check the frontend page loading chain**:
+   - Template (`/page/followup`) — should return 200 with correct IDs
+   - JS file (`/static/js/page-followup.js`) — should return 200, correct size
+   - Both are loaded dynamically via `loadPage()` in common.js
+
+4. **Simulate a hard page load** — suggest user does Ctrl+F5 (not just F5) to bypass cache:
+   - Ctrl+F5 = bypass cache, reload static assets
+   - F5 = may use cached assets
+
+5. **If all endpoints work and no server errors, the issue is browser-only**:
+   - Tell user to clear cache or open in incognito/private window
+   - If in Feishu (embedded browser): the Feishu in-app browser has aggressive caching and may not reload JS at all — force user to copy URL to system browser or clear Feishu app cache
+
+6. **Prevention**: Add pagination to data-heavy endpoints (>500 records) to reduce response size:
+```python
+# Example: add page/page_size params to large-list endpoints
+page = request.args.get('page', type=int, default=1)
+page_size = request.args.get('page_size', type=int, default=100)
+query = query.offset((page - 1) * page_size).limit(page_size)
+```
+
+**Key Insight**: When the server is completely fine but the client shows an error, always suspect:
+- Browser cache first (most common)
+- Service restart window (transient)
+- JS runtime error from stale code
+- CDN failure (Chart.js, Bootstrap)
+
+---
+
 ## Troubleshooting Decision Tree
 
 ```
@@ -1164,9 +1388,17 @@ API 返回 400? (非数据验证错)
 API 返回 500?
 ├─ 查看 Gunicorn 错误日志获取 traceback
 │  ├─ SQLAlchemy 错误 → 检查 SQL 语法（聚合函数等）
+│  ├─ InvalidDatetimeFormat: `` → 前端发送空字符串给 Date 字段
+│  │  ├─ 后端 guard: 在 setattr 前将 '' 转为 None
+│  │  └─ 前端 fix: shipping_time || null 而非 shipping_time || ''
 │  ├─ AttributeError 'seekable' → 使用 BytesIO 包装文件流
 │  ├─ ImportError → 检查模块导入位置
 │  └─ 其他错误 → 根据具体错误修复
+│
+编辑保存提示"成功"但数据没更新？
+├─ 前端 .then() 是否检查了 result.error？
+│  ├─ 否 → 添加检查：后端返回 500 时仍 resolve JSON，需要显式判断
+│  └─ 是 → 检查后端返回是否真的成功
 │
 列表显示"无数据"但 DB 有数据？
 ├─ 检查前端是否有默认筛选条件
@@ -1191,3 +1423,15 @@ Excel 导入失败？
 - SQLAlchemy Query Guide: https://docs.sqlalchemy.org/en/latest/orm/queryguide/
 - Flask Authentication Patterns: https://flask-smorest.readthedocs.io/
 - Werkzeug File Storage: https://werkzeug.palletsprojects.com/en/1.0.x/datastructures/#werkzeug.datastructures.FileStorage
+
+### Absorbed Skills (archived — content moved to references/)
+
+The following former standalone skills have been consolidated into this umbrella.
+Their unique content lives in the `references/` subdirectory:
+
+| Former Skill | Reference File | Content Summary |
+|:---|---|:---:|
+| `flask-blueprint-troubleshooting` | `references/blueprint-troubleshooting.md` | Route conflict detection, org best practices |
+| `flask-webapp-debugging` | `references/webapp-debugging-workflow.md` | General debugging workflow, double-lock pattern |
+| `flask-api-business-logic-debugging` | `references/api-business-logic-debugging.md` | Patient identification, time-window statistics |
+| Export modal filter pattern | `references/export-modal-filter-pattern.md` | Export modal with built-in filter controls — HTML+JS pattern, user correction signal (columns ≠ filtering) |

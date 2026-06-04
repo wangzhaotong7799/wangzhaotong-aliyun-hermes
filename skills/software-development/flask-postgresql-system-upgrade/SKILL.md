@@ -955,3 +955,14 @@ cd ~/projects/gaofang-v2/backend && python3 -m gunicorn --bind 0.0.0.0:5000 app:
 - `send_from_directory` 比 `send_file` 更安全（自动防御路径遍历攻击）
 - 若前端有路由 (Vue Router/React Router)，需注意刷新 404 问题
 - Nginx 反向代理时需额外配置 `try_files $uri /index.html`
+
+### Absorbed Skills
+
+The following former standalone skills have been consolidated into this umbrella.
+Their unique content is preserved in the `references/` subdirectory:
+
+| Former Skill | Reference File | Content Summary |
+|:---|---|:---:|
+|| `sqlite-to-postgresql-migration-with-sqlalchemy` | `references/sqlite-to-pg-sqlalchemy-data-migration.md` | SA 1.4 API, ID mapping, sequence sync, gap analysis, renumbering |
+|| `legacy-system-safe-refactoring` | `references/legacy-system-safe-refactoring.md` | Functional baseline, parallel deployment, rollback, checkpoint recovery |
+|| `gaofang-import-system` | `references/import-system-generalized.md` | Excel import architecture, column mapping patterns, multi-format date parsing, NOT NULL constraint handling, PostgreSQL sequence sync, batch transaction recovery, git submodule trap |

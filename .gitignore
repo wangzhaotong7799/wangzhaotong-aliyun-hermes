@@ -22,9 +22,8 @@ response_store.db-shm
 response_store.db-wal
 kanban.db
 
-# --- 会话历史和记忆（不需要同步历史聊天记录）---
+# --- 会话历史和检查点（不需要同步历史聊天记录）---
 sessions/
-memories/
 checkpoints/
 
 # --- 缓存文件 ---
@@ -96,3 +95,17 @@ skills/.usage.json
 # --- 锁文件 ---
 *.lock
 cron/.tick.lock
+
+# --- 大文件（音频/视频/图片/压缩包，不同步到 GitHub）---
+*.mp3
+*.mp4
+*.wav
+*.zip
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.qkdownloading
+horror-pipeline/
+videos/*.mp4

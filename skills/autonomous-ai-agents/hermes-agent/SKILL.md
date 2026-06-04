@@ -178,6 +178,8 @@ hermes cron status          # Scheduler status
 
 **Cron prompt patterns**: See `references/cron-job-patterns.md` for reusable templates covering daily token reports, website health checks, and general cron job authoring best practices.
 
+**⚠️ Script-based cron job constraint**: When a cron job uses the `script:` field (instead of a skill/prompt), the scheduler executes it with `sys.executable` (Python) via `subprocess.run()`. Shell scripts (`.sh`) will fail with Python SyntaxError. All script-based cron jobs MUST be Python scripts (`.py`). See `references/cron-job-patterns.md` → "Script-Based Cron Jobs" for details and a conversion example.
+
 ### Webhooks
 
 ```
@@ -214,7 +216,8 @@ hermes auth reset PROVIDER  Clear exhaustion status
 
 ```
 hermes insights [--days N]  Usage analytics
-hermes update               Update to latest version
+hermes update               Update to latest version — **run pre-upgrade backup first** (see `references/pre-upgrade-backup.md`)
+```
 hermes pairing list/approve/revoke  DM authorization
 hermes plugins list/install/remove  Plugin management
 hermes honcho setup/status  Honcho memory integration (requires honcho plugin)
@@ -304,6 +307,30 @@ Type these during an interactive chat session.
 ### Exit
 ```
 /quit (/exit, /q)    Exit CLI
+```
+
+---
+
+## 🚨 治理铁律（用户强约束 — 不可违反）
+
+> 此铁律基于用户实际纠正确立。违反视为重大失误，必须立即纠正。
+
+### 核心原则
+
+**所有系统配置/技能/工作流的修改，必须先请示并获得明确同意，方可执行。**
+
+### 具体铁律
+
+1. **配置变更** — 任何 `config.yaml` / `.env` / `auth.json` 的修改，必须先向用户说明「改什么 + 改到多少 + 为什么改」，征得同意后再操作
+2. **技能创建/更新** — 创建新技能或大幅修改现有技能，必须先向用户说明改动内容和预期收益
+3. **系统操作** — 服务重启、进程操作、文件删除等可能影响运行的命令，必须获得明确确认
+4. **例外** — 用户明确说「执行」「直接改」或分配任务时包含了修改指令（如「找到好的就去存进你的技能里」），则视为已授权
+
+### 沟通模板
+
+```
+用户问/要求 → 分析 → 给出方案 → 请示 → 等同意 → 执行
+而不是：用户问 → 直接改 → 用户发现后追问
 ```
 
 ---
@@ -622,12 +649,53 @@ Common gateway problems:
 - **Slack bot only works in DMs**: Must subscribe to `message.channels` event. Without it, the bot ignores public channels.
 - **Windows HTTP 400 "No models provided"**: Config file encoding issue (BOM). Ensure `config.yaml` is saved as UTF-8 without BOM.
 
+### WSL cron job side effects
+
+**⚠️ Hermes Agent cron jobs in WSL CAN trigger Windows host actions** (shutdown, reboot, etc.).
+
+If you set a cron job that runs `shutdown /s /t 0` (immediate shutdown, no countdown), every time Windows boots:
+1. WSL auto-starts
+2. Hermes Agent cron scheduler starts
+3. The cron job fires within 1-2 minutes
+4. Windows shows "正在关机" — **`shutdown /a` cannot abort `t 0`** because there's no pending shutdown timer
+
+**To diagnose:**
+```bash
+# Inside WSL, check what cron jobs exist
+hermes cron list
+```
+
+**To block immediately** (on Windows, as admin): Run the template script `templates/stop-shutdown-wsl.bat` — it kills the Hermes Agent process in WSL, cleans Windows scheduled tasks, clears WSL crontab, and optionally disables WSL auto-start.
+
+**Root fix**: Delete or edit the offending cron job:
+```bash
+hermes cron remove <job_id>
+```
+
+Or change it to use a delayed shutdown (`shutdown /s /t 300` with 5-min countdown) so `shutdown /a` remains a viable abort.
+
 ### Auxiliary models not working
 If `auxiliary` tasks (vision, compression, session_search) fail silently, the `auto` provider can't find a backend. Either set `OPENROUTER_API_KEY` or `GOOGLE_API_KEY`, or explicitly configure each auxiliary task's provider:
 ```bash
 hermes config set auxiliary.vision.provider <your_provider>
 hermes config set auxiliary.vision.model <model_name>
 ```
+
+**⚠️ Critical pitfall — auxiliary.vision.api_key is NOT inherited from the provider config.**
+Even if the provider (e.g., `aliyun-bailian`) already has an `api_key` defined with `${ALIYUN_BAILIAN_API_KEY}`, the auxiliary vision section has its own separate `api_key: ''` that defaults to empty. You MUST set it explicitly:
+
+```bash
+# Don't assume this works — it DOES NOT inherit:
+#   auxiliary.vision.api_key already defaults to ''
+
+# Instead, set it explicitly with the actual key value:
+hermes config set auxiliary.vision.api_key "sk-xxx"
+
+# Note: ${ENV_VAR} syntax is NOT resolved in auxiliary.* sections.
+# You must provide the actual key value, not an env var reference.
+```
+
+Without this step, `vision_analyze` will return 401 even if the provider's chat completions work fine. See `references/auxiliary-vision-setup.md` for a complete setup guide.
 
 ---
 
@@ -743,7 +811,9 @@ Two options:
 | Slash commands | `/help` in session or [Slash commands reference](https://hermes-agent.nousresearch.com/docs/reference/slash-commands) |
 | Skills catalog | `hermes skills browse` or [Skills catalog](https://hermes-agent.nousresearch.com/docs/reference/skills-catalog) |
 | Installing skills from a GitHub repo | `references/install-skills-from-github.md` — clone, copy, verify workflow |
-| Provider setup | `hermes model` or [Providers guide](https://hermes-agent.nousresearch.com/docs/integrations/providers) |
+| Pre-upgrade backup procedure | `references/pre-upgrade-backup.md` — systematic backup before `hermes update` |
+| Routine skill backup to GitHub | `references/skill-backup-to-repo.md` — sync modified skills to repo daily/weekly |
+| Provider setup | `hermes model` or [Providers guide](https://hermes-agent.nousresearch.com/docs/integrations/providers) — 阿里云百炼完整流程见 `references/aliyun-bailian-full-setup.md` |
 | Platform setup | `hermes gateway setup` or [Messaging docs](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/) |
 | MCP servers | `hermes mcp list` or [MCP guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp) |
 | Profiles | `hermes profile list` or [Profiles docs](https://hermes-agent.nousresearch.com/docs/user-guide/profiles) |

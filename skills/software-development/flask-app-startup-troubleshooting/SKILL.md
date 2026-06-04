@@ -137,6 +137,108 @@ sleep 2 && curl -s -o /dev/null -w "%{http_code}" http://localhost:80/
 
 ---
 
+### 7. Gunicorn 进程卡死（进程存活但无响应）
+
+**症状**：
+- 网站 HTML 和静态文件能加载（Nginx 正常），但数据加载不出来
+- 浏览器 DevTools 中 API 请求一直转圈，最终超时（HTTP 499/504）
+- `ss -tlnp` 显示端口正常监听，gunicorn PID 存在
+- `curl` 本地访问端口超时（HTTP 000 / Connection timed out）
+- 但 `ps` 看进程状态为 S（sleeping），非僵尸
+
+**根本原因**：
+- gunicorn worker 进程长期运行（数天）后，某些请求导致 worker 内部状态卡死
+- worker 不再处理新连接请求，但进程未退出、端口仍监听
+- Nginx 连接建立成功，但等待 upstream 响应时超时
+
+**典型场景**：gunicorn 自上次部署/重启后运行了 2-3 天以上，突然所有 API 请求全部超时。
+
+**诊断步骤**：
+
+```bash
+# 1. 检查端口是否在监听（往往能通过，误导）
+ss -tlnp | grep 8080
+# → LISTEN 0 2048 0.0.0.0:8080 0.0.0.0:*  (显示正常!)
+
+# 2. 测试本地连接（关键诊断）
+curl -s --connect-timeout 5 --max-time 10 http://127.0.0.1:8080/
+# → FAILED: curl HTTP 000  (连接超时！)
+
+# 3. 检查 nginx 错误日志确认超时
+tail -5 /www/wwwlogs/<site>_error.log
+# → upstream timed out (110: Connection timed out) while reading response header from upstream
+
+# 4. 检查 nginx 访问日志看响应码模式
+grep "$(date +%d/%b/%Y)" /www/wwwlogs/<site>_access.log | tail -10
+# → 页面请求 HTTP 200，但 JS/CSS 请求 HTTP 499（客户端超时断开）
+# → 后续 GET / 请求 HTTP 504（网关超时）
+```
+
+**诊断结论公式**：
+> `ss` 显示端口监听 + `curl` 本地连接超时 = gunicorn workers 卡死
+
+⚠️ 区别于进程死亡场景：
+| 指标 | 进程死亡 | 进程卡死 |
+|------|---------|---------|
+| `ss -tlnp` | 端口不在 | 端口在，PID 存在 |
+| `curl 127.0.0.1:PORT` | 立即拒绝(111) | 连接超时(000) |
+| 恢复方式 | 启动进程 | kill -HUP 重启 worker |
+| Nginx 错误 | `connect() failed (111: Connection refused)` | `upstream timed out (110: Connection timed out)` |
+
+**恢复方法（零中断热重启）**：
+
+```bash
+# 第一步：找到 gunicorn master PID
+ss -tlnp | grep 8080
+# 输出: users:(("gunicorn",pid=545162,fd=7),("gunicorn",pid=545164,fd=7))
+
+# 第二步：向 master 发 HUP 信号（不重启 master，只重启 workers）
+kill -HUP <master_pid>
+
+# 第三步：验证恢复
+sleep 2
+curl -s --max-time 10 http://127.0.0.1:8080/ | head -c 100
+# → HTTP 200, 内容正常返回 ✓
+```
+
+**`kill -HUP` 工作原理**：
+- 向 gunicorn master 进程发送 HUP 信号
+- master 保持监听端口不关闭
+- 旧 worker 在处理完当前请求后优雅退出
+- 新 worker 启动接管请求
+- 整个过程 **零中断、零丢请求**
+
+**预防措施**：
+
+在 gunicorn 启动参数中添加 `--max-requests`：
+
+```ini
+# systemd service 文件中 ExecStart 添加：
+--max-requests 1000 --max-requests-jitter 100
+
+# 完整示例：
+ExecStart=/path/to/venv/bin/gunicorn \
+    --bind 0.0.0.0:8080 \
+    --workers 2 --threads 2 \
+    --timeout 120 \
+    --max-requests 1000 \
+    --max-requests-jitter 100 \
+    --error-logfile /path/to/logs/gunicorn-error.log \
+    --access-logfile /path/to/logs/gunicorn-access.log \
+    --log-level info app:app
+```
+
+- `--max-requests 1000`：worker 处理 1000 个请求后自动重启
+- `--max-requests-jitter 100`：添加 ±100 的随机抖动，避免所有 worker 同时重启
+- 重启后无需手动干预，systemd 自动管理
+
+**⚠️ 坑**：如 gunicorn 配置已用 `patch` / `write_file` 等方式写入 systemd 文件，修改后需：
+```bash
+systemctl daemon-reload && systemctl restart <service>.service
+```
+
+---
+
 ### 2. 依赖包版本不兼容
 
 **典型案例：Python 3.6 + bcrypt**
@@ -471,6 +573,16 @@ echo "=== Port ===" && ss -tlnp | grep -E "$APP_PORT|80"
 echo "=== OOM History ===" && dmesg -T | grep -iE 'oom|killed' | tail -5
 echo "=== systemd ===" && systemctl list-units --all | grep -i "$APP_NAME"
 ```
+
+> **参考案例**：`references/gunicorn-hung-workers-recovery-session.md` 包含完整的 Gunicorn worker 卡死诊断和恢复实战记录。
+
+### Absorbed Skills
+
+The following former standalone skill has been consolidated into this umbrella. Its unique CentOS-specific content is preserved in the `references/` subdirectory:
+
+| Former Skill | Reference File | Content Summary |
+|:---|---|:---:|
+| `centos-python36-deployment` | `references/centos-python36-deployment-guide.md` | Python 3.6→3.8 upgrade guide, dependency compatibility matrix, EL8 system notes, Alibaba Cloud Linux 3 specifics, .gitignore venv management |
 
 ### B. Python 路径冲突恢复
 
