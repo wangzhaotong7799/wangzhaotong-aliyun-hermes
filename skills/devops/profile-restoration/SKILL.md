@@ -8,17 +8,26 @@ tags:
   - backup
   - migration
   - feishu
+  - github-sync
 triggers:
   - "Restore Hermes profile"
   - "Recover from backup"
   - "Merge config from multiple sources"
   - "Restore settings from git repo"
   - "恢复设置"
+  - "备份配置到GitHub"
+  - "每日自动备份"
+  - "daily backup to GitHub"
+  - "sync config to repo"
 ---
 
 # Hermes Profile Restoration
 
 Restore a complete Hermes profile (~/.hermes/) from one or more backup sources. Covers the common scenario where the user has a **git repo** (for config + skills) and a **local tarball/systemd backup** (for runtime data, credentials, memories, cron state).
+
+## Complementary Workflow: Daily Backup Automation → GitHub
+
+This skill covers **restoration**. For the complementary **backup creation** workflow (automate daily sync of config + skills + memory to GitHub, with cron job and git push), see `references/daily-backup-automation.md`.
 
 ## When to Use
 

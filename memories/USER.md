@@ -53,3 +53,5 @@ BGM管理：新BGM下载到 `horror dark ambient/` 后，必须在 `audio/` 建�
 当元宝跑偏时（答非所问、理解错方向），主人会说"？"——这是一个纠正信号，元宝应主动重读问题、修正方向，而不是追问"你说什么"。主人偏好直接精准的沟通，不喜冗长解释。
 §
 User expects direct, on-topic answers. When they ask about a specific thing (e.g., "why is X wrong"), answer that specific X first — don't expand to related but tangential topics (e.g., explaining glibc when they asked about kernel version). Topic drift without being asked is perceived as off-target. Silence/"?" means "you went off track, come back."
+§
+飞书代码块（```）没有复制按钮。需要提供可复制命令时，用纯文本而非代码块，方便长按选中复制。

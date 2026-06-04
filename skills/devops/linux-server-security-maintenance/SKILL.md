@@ -156,7 +156,35 @@ cronjob action=create
 5. `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/`
 6. `uname -r` 确认新内核
 
-### Step 8: 设置重启后上线通知
+### 附加：GitHub SSH 配置（国内服务器网络优化）
+
+国内云服务器（阿里云等）对 GitHub SSH 的默认 port 22 数据通道有防火墙干扰，表现为 SSH 认证能通过但 `git push` 超时。
+
+**快速配置**：
+
+```bash
+# 1. 写入 SSH config（用实际密钥文件名替换 id_rsa）
+cat > ~/.ssh/config << 'EOF'
+Host github.com
+    HostName ssh.github.com
+    Port 443
+    User git
+    IdentityFile ~/.ssh/id_rsa
+    IdentitiesOnly yes
+EOF
+
+# 2. 添加 host key
+ssh-keyscan -p 443 ssh.github.com >> ~/.ssh/known_hosts
+
+# 3. 验证
+ssh -T -p 443 git@ssh.github.com
+```
+
+配置后 `git push` 耗时从 5+ 分钟超时降到 10-30 秒。
+
+> 详细步骤、常见陷阱、故障排查见 `references/github-ssh-port443-china.md`。
+
+## Step 8: 设置重启后上线通知
 
 可选（仅当用户要求时）：创建 systemd oneshot 服务。
 
