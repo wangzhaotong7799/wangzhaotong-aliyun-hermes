@@ -372,6 +372,8 @@ If you catch yourself thinking:
 
 **ALL of these mean: STOP. Return to Phase 1.**
 
+**A related behavioral red flag:** The user asks "What does this error mean?" — and you explain the root cause AND apply a fix. This is NOT debugging; it's moving from explanation to action without being asked. **Only explain when asked to explain. Do not fix unless the user says "fix it."**
+
 **If 3+ fixes failed:** Question the architecture (Phase 4 step 5).
 
 ## Common Rationalizations

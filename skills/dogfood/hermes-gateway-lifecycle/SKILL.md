@@ -193,3 +193,4 @@ the log-based polling inside the notification script.
 
 - `hermes-agent` skill — full CLI reference, gateway installation, config
 - `systematic-debugging/references/debugging-systemd-services.md` — detailed debugging guide with reproduction transcript
+- `references/dual-gateway-service-conflict.md` — two systemd services fighting over feishu WebSocket, diagnosis and resolution

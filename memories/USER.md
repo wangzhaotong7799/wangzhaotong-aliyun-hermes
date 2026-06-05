@@ -55,3 +55,5 @@ BGM管理：新BGM下载到 `horror dark ambient/` 后，必须在 `audio/` 建�
 User expects direct, on-topic answers. When they ask about a specific thing (e.g., "why is X wrong"), answer that specific X first — don't expand to related but tangential topics (e.g., explaining glibc when they asked about kernel version). Topic drift without being asked is perceived as off-target. Silence/"?" means "you went off track, come back."
 §
 飞书代码块（```）没有复制按钮。需要提供可复制命令时，用纯文本而非代码块，方便长按选中复制。
+§
+用户明确表示不要擅自修改 config.yaml 等配置文件。即使看到配置有问题，也必须先问主人再动，不能自作主张修改。"你不用删"就是铁则。任何系统配置/文件/外部操作的改动前必须先请示主人同意。

@@ -25,9 +25,18 @@ triggers:
 
 Restore a complete Hermes profile (~/.hermes/) from one or more backup sources. Covers the common scenario where the user has a **git repo** (for config + skills) and a **local tarball/systemd backup** (for runtime data, credentials, memories, cron state).
 
-## Complementary Workflow: Daily Backup Automation → GitHub
+## Complementary Workflow: Backup Creation (Two Patterns)
 
-This skill covers **restoration**. For the complementary **backup creation** workflow (automate daily sync of config + skills + memory to GitHub, with cron job and git push), see `references/daily-backup-automation.md`.
+This skill covers **restoration**. For the complementary **backup creation** workflow, two patterns are documented:
+
+| Pattern | Reference | Use Case |
+|---------|-----------|----------|
+| **GitHub 同步** | `references/daily-backup-automation.md` | 日常版本跟踪、跨机器同步配置/技能/记忆文本（不包含 secrets 和运行时 DB） |
+| **本地 Tarball** | `references/local-tarball-backup.md` | 系统重装后一键恢复、全量数据兜底（含 .env/auth.json 和 memory_store.db/kanban.db 等运行时数据） |
+| 备份脚本 | `scripts/hermes-backup.sh` | 每日 02:00 cron 自动执行，打包 config/SOUL/skills/memories/cron/kanban |
+| 恢复脚本 | `scripts/hermes-restore.sh` | 交互式恢复，支持参数传入或列表选择，覆盖前确认警告 |
+
+**建议两者并用**：GitHub 跟踪配置版本历史，本地 Tarball 做全量离线兜底。
 
 ## When to Use
 
@@ -339,34 +348,7 @@ for line in raw.split(b'\n'):
 6. **Skills directory can come from either source.** The git repo has the canonical skills; the skills-backup may have additional or newer skills. Prefer git for canonical, overlay backup for additions.
 7. **Dual env.bak files.** When both a `env.bak` and `tar.gz/default/.env.backup` exist, compare them — the env.bak may have more recent keys (like `ALIYUN_BAILIAN_API_KEY`).
 8. **rtk-rewrite plugin.** The config may list `plugins.enabled: [rtk-rewrite]` but the plugin binary may not be installed. This is not a restoration issue — the config entry is correct, the binary needs separate installation via `pip install rtk-hermes`.
-9. **Dual gateway services (user + system) causing restart loops.** After restoring a profile from backup, both user and system gateway services may be installed simultaneously. This causes a conflict: the services fight over feishu's WebSocket connection, resulting in repeated SIGTERM/shutdown loops. **hermes gateway status** shows the warning: `Both user and system gateway services are installed (user + system).`
-
-   **Step-by-step resolution:**
-   ```bash
-   # 1. Check which is running
-   hermes gateway status  # user-level
-   sudo systemctl status hermes-gateway  # system-level
-   
-   # 2. Uninstall the one you don't want (usually the user service)
-   hermes gateway uninstall
-   
-   # 3. Kill any stuck gateway processes (may be in D/Ssl state)
-   pkill -f 'hermes.*gateway run' 2>/dev/null
-   # If a specific PID won't die:
-   kill -9 <PID>
-   
-   # 4. Reset systemd state and restart
-   sudo systemctl reset-failed hermes-gateway 2>/dev/null
-   sudo systemctl start hermes-gateway
-   
-   # 5. Verify no more crash loops
-   sleep 10 && sudo systemctl status hermes-gateway | head -10
-   # Expected: Active: active (running)
-   # Check feishu connected:
-   journalctl -u hermes-gateway --since '30 sec ago' --no-pager | grep 'Lark.*connected'
-   ```
-   
-   **Diagnosing stuck "deactivating (stop-sigterm)" state:** If `systemctl status` shows `Active: deactivating (stop-sigterm)` but the PID is still alive (Ssl state), systemd sent SIGTERM but the process didn't exit. The process is stuck — SIGKILL is the only way out. After kill, run `systemctl reset-failed hermes-gateway` before starting again.
+9. **Dual gateway services (user + system) causing restart loops.** After restoring a profile from backup, both user and system gateway services may be installed simultaneously, causing a WebSocket conflict. See `hermes-gateway-lifecycle/references/dual-gateway-service-conflict.md` for full diagnosis and step-by-step resolution.
 
 10. **Restored API keys may be expired.** `.env` files from backups often carry stale API keys that were rotated after the backup was made. Always test them immediately after restoration. Common pattern:
     ```python

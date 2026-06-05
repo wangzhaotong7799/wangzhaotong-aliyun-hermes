@@ -95,3 +95,8 @@ sudo systemctl start hermes-gateway
 ## Prevention
 
 Check for this condition immediately after restoring a profile. The `hermes gateway status` command always warns about dual services — don't ignore this warning.
+
+## See also
+
+- `hermes-gateway-lifecycle` skill — full gateway service lifecycle, notification setup, readiness checks, failure modes
+- `profile-restoration` skill — profile backup/restore workflow (this conflict is a common post-restore symptom)

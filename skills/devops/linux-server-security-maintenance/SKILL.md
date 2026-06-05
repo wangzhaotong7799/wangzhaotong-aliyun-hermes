@@ -186,51 +186,13 @@ ssh -T -p 443 git@ssh.github.com
 
 ## Step 8: 设置重启后上线通知
 
-可选（仅当用户要求时）：创建 systemd oneshot 服务。
+可选（仅当用户要求时）。参见 `hermes-gateway-lifecycle` 技能的 **Online Notification Service** 章节，包含正确的通知脚本和服务文件模板。
 
-**脚本路径**：`/root/.hermes/scripts/hermes-online-notify.sh`
-
-> ⚠️ **venv 路径正确写法**：Hermes venv 在 `hermes-agent/venv/` 下，**不是**根目录的 `venv/`。必须用绝对路径，因为 systemd 没有加载 ~/.bashrc。
-
-```bash
-#!/bin/bash
-sleep 30
-cd /root/.hermes/hermes-agent
-source /root/.hermes/hermes-agent/venv/bin/activate 2>/dev/null
-HERMES_BIN="/root/.hermes/hermes-agent/venv/bin/hermes"
-
-# 等待网关就绪（健康检查）
-for i in $(seq 1 30); do
-    if curl -sf http://127.0.0.1:9090/health >/dev/null 2>&1; then break; fi
-    sleep 2
-done
-
-# 发送上线通知
-"$HERMES_BIN" send feishu:oc_xxx "元宝已上线 🟢" 2>/dev/null
-```
-
-**service 文件**（`/etc/systemd/system/hermes-online-notify.service`）：
-
-```ini
-[Unit]
-Description=Hermes 上线通知
-After=hermes-gateway.service
-Wants=hermes-gateway.service
-[Service]
-Type=oneshot
-ExecStart=/root/.hermes/scripts/hermes-online-notify.sh
-User=root
-RemainAfterExit=no
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-systemctl daemon-reload
-systemctl enable hermes-online-notify.service
-```
-
-> ⚠️ 写 `/etc/` 下文件需要用 terminal 配合重定向，write_file 会拒绝系统路径。
+> ⚠️ 注意事项：
+> - 使用 **log-based readiness check**（`grep 'feishu connected' gateway.log`），**不要用 curl** 检查 HTTP 端口 — Hermes Gateway 没有 HTTP 服务器
+> - 使用 `hermes send --to feishu:TARGET "message"` 语法（**必须带 `--to` 参数**）
+> - venv 路径必须是绝对路径：`/root/.hermes/hermes-agent/venv/bin/hermes`
+> - 写 `/etc/` 下文件需要用 terminal 配合重定向，write_file 会拒绝系统路径
 
 ## 沟通规范
 
