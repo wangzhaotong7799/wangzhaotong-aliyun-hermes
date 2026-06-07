@@ -26,19 +26,11 @@ Token管家技能: token-manager(devops/)。TokScale+RTK已就绪，全局Hook�
 §
 team-architect 技能已建（v1.0.0），含8条铁律，重点是第8条「所有操作必须请示」——任何系统配置/文件/外部操作改动前必须先问主人。附references/user-work-rules.md集中存放主人工作铁则。影墨小队三大件（SKILL+SOUL+MEMORY）已全部补齐，每个agent有独立技能库（scripts/references/templates）。金脉小队和星光小队缺少独立技能库，星光小队MEMORY.md为0KB空文件，主人已知晓但尚未指示补全。
 §
-翻拍SOP核心原则：翻拍质量决定产品销量。三份文档已就绪——kling_remake_workflow_v1.md(完整SOP)、kling_remake_template_v1.md(6种翻拍模板)、kling_remake_cheatsheet_v1.md(实战速查卡)，均在 /root/wangzhaotong-hermes/videos/。翻拍目标平台切换到可灵(Kling)，替换之前的通义万相。
+OpenViking v0.3.14已部署并运行中:127.0.0.1:1933,systemd已启。Embedding=硅基流动BAAI/bge-m3(1024维),VLM=Qwen/Qwen3-8B。Hermes memory.provider=openviking。工作区/workspace/openviking_workspace。旧memory_store.db 31条事实已全部迁移完成(文件系统写入+自动索引),搜索引擎可检索,VL自动生成中文摘要。
 §
 团队架构铁律：每个 agent 必须有独立三大件（SKILL.md+SOUL.md+MEMORY.md）+ 铁律（≥5条）+ 独立技能库（scripts/ / references/ / templates/）。建队必须按 team-architect 技能走架构优先流程，全部验收通过才能开工。已补齐金脉小队4人 + 星光小队10人 + 影墨小队3人，共17个agent全部就绪。
 §
-DeepSeek 计费偏差(2026-05-13实测)：DeepSeek官网账单比TokScale/Hermes DB多算约36%的Token（缓存命中+29%, 缓存未命中+410%, 输出+51%），费用差距约2.8x（$1.30 vs $0.47）。TokScale定价算法与DeepSeek官方定价完全吻合，偏差源于Token数量口径不同，非单价问题。deepseek-v4-flash官方定价：缓存命中$0.0028/M, 缓存未命中$0.14/M, 输出$0.28/M。
-§
-费用计算（CNY）：
-- DeepSeek v4 Flash 官方定价（USD）：缓存命中 $0.0028/1M, 缓存未命中 $0.14/1M, 输出 $0.28/1M
-- 汇率：1 USD ≈ 7.14 CNY（按 DeepSeek 官网账单校准）
-- 关键：DeepSeek 实际计费比 API usage 字段多 ~36% token（官网 Bill 口径 vs Hermes DB 口径）
-- 日后费用 = TokScale_USD × 1.36 × 7.14 = CNY
-- 或直接用 DeepSeek 官网账单为准
-- 所有费用报告优先展示人民币（CNY），美元做参考
+DeepSeek v4 Flash定价($/M)：缓存命中0.0028,缓存未命中0.14,输出0.28。官网比TokScale多算~36% token。费用CNY=TokScale_USD×1.36×7.14。优先用CNY报告。
 §
 Gunicorn 卡死根治 + 膏方网站优化(2026-05-23)：CDN自托管到/static/lib/ + Nginx直服首页/静态文件 + gzip压缩。Gunicorn加--max-requests 1000 --max-requests-jitter 100防worker卡死，每日06:00 cron HUP热重启（cronjob 5495db19311f, 脚本gunicorn-daily-reload.sh）。
 §
