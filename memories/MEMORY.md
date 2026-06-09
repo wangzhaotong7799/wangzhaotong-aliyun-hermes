@@ -49,3 +49,5 @@ hermes-online-notify.service 脚本在 /root/.hermes/scripts/hermes-online-notif
 膏方V2 504修复(2026-06-02)：根因是拼音搜索先SQL分页再Python过滤导致分页错误+线程耗尽。三项改动：①prescriptions.py中拼音搜索先取全部ID做拼音匹配再分页取完整数据；②Gunicorn workers/threads 2→4；③Nginx proxy_read_timeout 60s→120s。已推送drug-distribution-system master分支。
 §
 Nginx临时目录权限修复(2026-06-02)：/var/lib/nginx/和/var/lib/nginx/tmp/要771(o+x)让www用户遍历。已复发两次，已设cronjob默认每6小时修复（chmod 771 /var/lib/nginx /var/lib/nginx/tmp）。先手动修复后设cron。
+§
+Token管家 cron 故障修复(2026-06-09)：三个根因—①deepseek-v4-flash不在LiteLLM定价库中，TokScale报JSON parse failed，已手动加入缓存（输入$0.14/M、缓存命中$0.0028/M、输出$0.28/M）；②SKILL.md 30K+字符加载到cron上下文导致agent无响应，已改用自包含prompt(无skills加载)；③rtk gain误用累计参数，已改为rtk gain --daily。修复后TokScale无警告正常运行，定价缓存已更新到~/.config/tokscale/cache/pricing-litellm.json。token-manager技能已升级v1.2.0。

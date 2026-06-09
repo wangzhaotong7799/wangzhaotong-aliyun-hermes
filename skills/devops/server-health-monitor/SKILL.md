@@ -211,7 +211,7 @@ from hermes_tools import terminal
 
 # Check gunicorn (port 8080)
 r = terminal("ss -tlnp | grep 8080")
-# Output: LISTEN 0 2048 0.0.0.0:8080 0.0.0.0:* users:((\"gunicorn\",pid=X,fd=7))
+# Output: LISTEN 0 2048 0.0.0.0:8080 0.0.0.0:* users:(("gunicorn",pid=X,fd=7))
 
 # Check nginx (port 80)
 r = terminal("ss -tlnp | grep ':80 '")
@@ -255,6 +255,8 @@ from hermes_tools import read_file  # not available, use terminal with cat | tai
 ```
 
 **Ignore history:** Filter by current date pattern. All entries before yesterday are historical noise.
+
+**🆕 Diagnostic nuance: Nginx error log may be days stale while app.log is writing actively.** Nginx error log only records proxy-level errors (upstream timeouts, connection refused, file-not-found, Permission denied). If the last 24h had zero proxy errors, the Nginx error log appears frozen — its most recent entry could be days old. **This does NOT mean the server is idle.** Always cross-check with app.log or gunicorn access logs. A quiet Nginx error log with active app.log traffic is a sign of a healthy server, not a dead one.
 
 ### Step 4: Database Connectivity
 
@@ -363,7 +365,7 @@ r = terminal("su -s /bin/bash -c 'touch /var/lib/nginx/tmp/proxy/test_write_$$' 
 
 **Step 4 — Check all 5 temp dirs (not just proxy):**
 ```python
-r = terminal("for d in /var/lib/nginx/tmp/*/; do echo -n \"$d → \"; su -s /bin/bash -c \"touch \\\"${d}test_\\\$\$\" www 2>&1 || echo FAIL; done")
+r = terminal("for d in /var/lib/nginx/tmp/*/; do echo -n \"$d → \"; su -s /bin/bash -c \"touch \\\"${d}test_\\$\\$\\\" www 2>&1 || echo FAIL; done")
 ```
 
 **Step 5 — Check systemd PrivateTmp (doesn't cover /var/lib/nginx/tmp):**
@@ -500,6 +502,15 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
    - `"Invalid HTTP method: '\\x05\\x04\\x00\\x01\\x02\\x80\\x05...'"` — TLS/SSL handshake on plain HTTP port
    - `"Invalid HTTP request line: 'HELP'"` — old-school telnet/smtp scanner
    - Empty request line — health-check bots or connection probes
+   - **Chinese-targeted vulnerability scanner probes** (observed in production since mid-2026): These are a recurring class of scanner targeting Chinese-hosted web servers. Recognize these patterns:
+     - `/SDK/webLanguage` — probes for ZTE/LTE gateway admin pages (CVE-2015-6967 and related classes)
+     - `/boaform/admin/formLogin` — ZTE/TP-Link router admin login probe
+     - `/portal/redlion` — Red Lion Controls SCADA web interface probe
+     - `/video.dispatch.tc.qq.com/...` — scanner constructs URLs by prepending site origin to a full Tencent CDN video URL (hallucinated path, harmless)
+     - `/security.txt` — RFC 9116 compliance checker / security researcher bot (legitimate, not hostile)
+     - `/zc` — short-path scanner probe (origin unknown)
+     - `action` or `page-` parameter probes without file extensions — enumeration scanners
+   These typically appear in small numbers (1-5 hits per path per day). Document patterns in the session's reference file so future reports can recognize repeated probes.
    **None of these are application errors.** Do not flag them in reports. If they appear in large volume (>100/day from same IP), optionally suggest firewall rules in the report body, but do NOT mark 🚨.
 7. **Anonymous cron execution.** No user present — never ask questions. Make reasonable assumptions and proceed.
 8. **Project path mismatch.** A task may cite `~/user/project/` but the real project lives elsewhere (e.g., `/workspace/projects/.../` or `/www/wwwroot/.../`). Always check the systemd service file first to find the real `WorkingDirectory`.
@@ -534,10 +545,16 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
     - **Real OOM**: Workers crash unpredictably throughout the day, not just at restart boundaries. System `dmesg` shows `oom-killer` events. Memory usage climbs before each crash.
     - **Reload-induced SIGKILL**: Only happens within ~2 minutes of a HUP signal. The surviving new worker(s) are healthy. No `oom-killer` in dmesg. Check `[INFO] Handling signal: hup` or `[INFO] Hang up: Master` timestamps — the SIGKILL will be ~`--timeout` seconds (default 120s) after that. This is a **benign normal reload artifact**.
 
-    The `[ERROR] Worker (pid:X) was sent SIGTERM!` messages are also misleading: this is simply gunicorn informing the old worker to exit by sending SIGTERM. It's logged at `[ERROR]` level for visibility but is not an error condition. A clean fast reload (all workers exit in under 1-2 seconds) logs the same `SIGTERM` messages.
+    The `[ERROR] Worker (pid:X) was sent SIGTERM!` messages are also misleading: this is simply gunicorn informing the old worker to exit by sending SIGTERM. It's logged at `[ERROR] level for visibility but is not an error condition. A clean fast reload (all workers exit in under 1-2 seconds) logs the same `SIGTERM` messages.
 
     **Report guidance**: If the only errors at the reload boundary are `SIGTERM` + `WORKER TIMEOUT` + `SIGKILL` on *old* workers (not new ones), and the new workers booted successfully within 1s of the HUP signal, this is a clean reload with expected slow-worker timeout. Note it in the report but do NOT flag as 🚨 — frame as "scheduled reload completed, old workers took X seconds to drain" rather than "worker crash".
 
 13. **Gunicorn log paths in terminal trigger false "long-lived server/watch process" detection.** The command `tail -30 /workspace/projects/drug-distribution-system/gaofang-v2/logs/gunicorn-error.log` gets blocked by Hermes's "foreground command appears to start a long-lived server/watch process" heuristic. The heuristic seems to match on the path pattern `/workspace/projects/.../logs/`. Workarounds:
     - Use `read_file` (from hermes_tools) with offset/limit — always works
     - Use a simpler `cat` command or `ls -la` on the log dir (these don't trigger the heuristic)
+
+## References
+- `references/gaofang-v2-health-check-2026-06-09.md` — Clean baseline (June 9): ZTE/LTE scanner probes, Nginx error log staleness observation, app.log bot patterns
+- `references/gaofang-v2-health-check-2026-06-04.md` — Previous clean baseline with HUP reload documentation
+- `references/gaofang-v2-health-check-2026-06-03.md` — Upstream timeout analysis (Scenario B, slow queries)
+- `references/nginx-temp-dir-permissions-diagnosis-session.md` — Nginx temp dir permission bug diagnosis

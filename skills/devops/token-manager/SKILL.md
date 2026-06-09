@@ -1,7 +1,7 @@
 ---
 name: token-manager
 description: "Token管家 — 每日 Token 用量统计（TokScale）+ Token 压缩（RTK）一体化管理"
-version: 1.1.0
+version: 1.2.0
 author: Hermes Agent
 metadata:
   hermes:
@@ -122,11 +122,10 @@ rtk init -g --auto-patch
 
 TokScale 依赖 GitHub 网络（拉取 LiteLLM 定价文件），网络不稳定时会超时。此时可直接查询 Hermes 本地 SQLite 数据库获取用量数据。
 
-**查询昨日用量：**
+**查询昨日用量（通用版本，无需改日期）：**
 
 ```bash
-sqlite3 /root/.hermes/state.db "
-SELECT
+sqlite3 /root/.hermes/state.db "SELECT date(started_at, 'unixepoch') as day,
   COUNT(*) as session_count,
   COALESCE(SUM(message_count), 0) as total_messages,
   COALESCE(SUM(input_tokens), 0) as total_input,
@@ -136,11 +135,11 @@ SELECT
   COALESCE(SUM(reasoning_tokens), 0) as total_reasoning,
   COALESCE(SUM(estimated_cost_usd), 0) as total_cost
 FROM sessions
-WHERE date(started_at, 'unixepoch') = '2026-05-12';
+WHERE date(started_at, 'unixepoch') = date('now', '-1 day');
 "
 ```
 
-**按模型拆分昨日用量：**
+**按模型拆分昨日用量（通用版本，无需改日期）：**
 
 ```bash
 sqlite3 /root/.hermes/state.db "
@@ -149,7 +148,7 @@ SELECT model, COUNT(*) as sessions, COALESCE(SUM(message_count), 0) as msgs,
   COALESCE(SUM(output_tokens), 0) as output,
   COALESCE(SUM(cache_read_tokens), 0) as cache_read,
   COALESCE(SUM(estimated_cost_usd), 0) as cost
-FROM sessions WHERE date(started_at, 'unixepoch') = '2026-05-12'
+FROM sessions WHERE date(started_at, 'unixepoch') = date('now', '-1 day')
 GROUP BY model ORDER BY cost DESC;
 "
 ```
@@ -389,6 +388,41 @@ print(f'缓存已更新: {len(pricing)} 个模型')
 "
 ```
 
+**deepseek-v4-flash 不在 LiteLLM 官方定价库中**，TokScale 加载缓存后仍无法计算准确费用。需手动添加到缓存：
+
+```bash
+python3 << 'PYEOF'
+import json, os, time
+cache_path = os.path.expanduser('~/.config/tokscale/cache/pricing-litellm.json')
+with open(cache_path) as f:
+    cache = json.load(f)
+data = cache.get('data', {})
+# deepseek-v4-flash 定价（DeepSeek 官方：缓存命中 $0.0028/M, 未命中 $0.14/M, 输出 $0.28/M）
+data['deepseek-v4-flash'] = {
+    "max_tokens": 65536, "max_input_tokens": 131072, "max_output_tokens": 65536,
+    "input_cost_per_token": 1.4e-07,          # $0.14/M（缓存未命中）
+    "input_cost_per_token_cache_hit": 2.8e-09, # $0.0028/M（缓存命中）
+    "output_cost_per_token": 2.8e-07,          # $0.28/M
+    "cache_read_input_token_cost": 2.8e-09,
+    "litellm_provider": "deepseek", "mode": "chat",
+    "supports_function_calling": True, "source": "manual_add"
+}
+# 同时添加别名方便 TokScale 识别
+for alias in ['openrouter/deepseek/deepseek-v4-flash', 'deepseek/deepseek-v4-flash']:
+    data[alias] = data['deepseek-v4-flash'].copy()
+cache['data'] = data; cache['timestamp'] = int(time.time())
+with open(cache_path, 'w') as f: json.dump(cache, f)
+print(f'deepseek-v4-flash 已添加到缓存，模型总数: {len(data)}')
+PYEOF
+```
+
+验证生效：
+```bash
+# 检查不再有 LiteLLM JSON parse failed 警告
+/root/.hermes/node/bin/tokscale graph --client hermes --today 2>/tmp/tokscale_stderr.txt
+cat /tmp/tokscale_stderr.txt  # 应为空
+```
+
 ### 6.3 deepseek-v4-flash 官方定价（截至 2026-05-13）
 
 | 项目 | 价格（per 1M tokens） |
@@ -429,31 +463,56 @@ print(f'缓存已更新: {len(pricing)} 个模型')
 # 投递方式: 自动输出到终端（由 cron 框架投递给用户）
 ```
 
-**Cron 任务 Prompt 模板：**
+**Cron 任务 Prompt 模板（自包含模式 — 推荐）：**
+
+⚠️ **坑点：不要加载 SKILL.md 作为 cron skill** — SKILL.md 文件很大（本技能约 30K+ 字符），加载到 cron 上下文中会导致 agent 上下文溢出，agent 无法产出任何输出（session 表现为仅 user 消息无 assistant 响应）。**如果 cron job 的 `skills` 参数引用了本技能，务必移除并改用以下自包含 prompt：**
+
+```yaml
+# 正确配置：不加载技能，用自包含 prompt
+# cronjob(action='create', prompt='...全文如下...', skills=[])
+```
 
 ```
 任务：生成昨日 Token 使用和节约情况报告
 
+请按以下步骤执行并输出报告到终端（会自动投递到飞书）：
+
 1. 计算昨天的日期（YYYY-MM-DD格式）
-2. 用以下命令查询昨日 TokScale 用量明细：
-   /root/.hermes/node/bin/tokscale graph --client hermes --since {昨天日期} --until {昨天日期}
-   → 如果 TokScale 超时或网络错误（LiteLLM pricing 拉取失败），降级到 Hermes DB：
-     sqlite3 /root/.hermes/state.db "
-     SELECT COUNT(*) as sessions, SUM(message_count) as msgs,
-       SUM(input_tokens) as input, SUM(output_tokens) as output,
-       SUM(cache_read_tokens) as cache_read, SUM(cache_write_tokens) as cache_write,
-       SUM(estimated_cost_usd) as cost
-     FROM sessions WHERE date(started_at, 'unixepoch') = '{昨天日期}';
-     "
-3. 用以下命令查询 RTK 压缩节约统计：
-   rtk gain --daily   ← （重要：用 --daily 而非无参数，才能获取昨日单独数据）
-• 消息数 / Token总量（输入+输出+缓存） / 费用
-   → 费用优先以 **CNY（人民币）** 展示，USD 做参考
-   → 注明「TokScale 估算，实际以提供商官网账单为准」
-• 累计压缩率 / 已省 tokens / 昨日命令数
-• 本月累计
-5. 如果 TokScale / DB / RTK 都返回错误，如实报告不编造
+
+2. 查询昨日 TokScale 用量明细：
+   /root/.hermes/node/bin/tokscale graph --client hermes --since {昨天日期} --until {昨天日期} 2>/dev/null
+   → 如果 TokScale 返回错误或超时，降级到 Hermes DB：
+     sqlite3 /root/.hermes/state.db "SELECT COUNT(*) as sessions, SUM(message_count) as msgs, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(cache_read_tokens) as cache_read, SUM(estimated_cost_usd) as cost FROM sessions WHERE date(started_at, 'unixepoch') = '{昨天日期}';"
+
+3. 查询 RTK 压缩节约统计（注意用 --daily）：
+   rtk gain --daily 2>/dev/null | tail -5
+
+4. 组装报告，格式如下：
+   📊 Token 日报 · {昨天日期}
+   ━━━━ 用量统计 ━━━━
+   • 会话数：XX 次
+   • 消息数：XX 条
+   • Token 总量：XX (输入 XX + 输出 XX + 缓存 XX)
+   • 费用：¥X.XX（TokScale 估算，实际以 DeepSeek 官网账单为准）
+
+   ━━━━ 压缩节约 ━━━━
+   • 累计压缩率：XX%（已省 XX tokens）
+   • 昨日命令数：XX 条
+
+   ━━━━ 本月累计 ━━━━
+   • Token 总量：XX
+   • 费用：¥X.XX
+
+5. 重要注意事项：
+   - 费用优先以 CNY（人民币）展示，USD 做参考
+   - 报告末尾加注「TokScale 估算，实际以 DeepSeek 官网账单为准」
+   - 不要乘任何修正系数（×1.36、×汇率等）
+   - 如果 TokScale / DB / RTK 都返回错误，如实报告不编造
 ```
+
+**旧版模板（仍然可用但不再推荐 — 依赖 skill 加载）：**
+
+```yaml
 
 ### 4.2 报告示例输出
 
