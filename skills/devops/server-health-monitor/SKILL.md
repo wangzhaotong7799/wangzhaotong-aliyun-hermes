@@ -510,7 +510,16 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
      - `/security.txt` — RFC 9116 compliance checker / security researcher bot (legitimate, not hostile)
      - `/zc` — short-path scanner probe (origin unknown)
      - `action` or `page-` parameter probes without file extensions — enumeration scanners
-   These typically appear in small numbers (1-5 hits per path per day). Document patterns in the session's reference file so future reports can recognize repeated probes.
+   - **Static file extension brute-force scanner** (observed June 2026, IP 163.7.3.220): A newer scanner class that systematically probes every static JS/CSS file it discovers by appending a sequence of alternative extensions. Unlike the Chinese-targeted probes above (which hit specific router/SCADA paths), this scanner works breadth-first on static files:
+     - Target file: `chart`, `xlsx.full.min.js`, `common.js`, `page-prescriptions.js`, `page-`, etc.
+     - Extension sequence tried: `.txt` → `.yaml` → `.yml` → `.conf` → `.bak` → `.old` → `.env` → `.php` → `.json` → `.js.map` → `.js.js`
+     - Volume: **100-200 requests in a single burst** (observed: 122 in ~6 minutes from one IP)
+     - Source: typically a single IP rather than distributed
+     - Harmless (all return 404), but creates significant log noise that can obscure real errors
+     - **Recognition pattern in error logs**: Bursts of `open() \".../static/.../.ext\" failed (2: No such file or directory)` from the same IP with sequential timestamps in tight clusters
+     - **Not a real threat** — these files don't exist on the server, and the scanner is probing blindly
+     - Optionally suggest blocking the IP at Nginx level if volume is >200/day
+   These typically appear in small numbers (1-5 hits per path per day) except for the extension brute-force type which can hit 100+ in a burst. Document patterns in the session's reference file so future reports can recognize repeated probes.
    **None of these are application errors.** Do not flag them in reports. If they appear in large volume (>100/day from same IP), optionally suggest firewall rules in the report body, but do NOT mark 🚨.
 7. **Anonymous cron execution.** No user present — never ask questions. Make reasonable assumptions and proceed.
 8. **Project path mismatch.** A task may cite `~/user/project/` but the real project lives elsewhere (e.g., `/workspace/projects/.../` or `/www/wwwroot/.../`). Always check the systemd service file first to find the real `WorkingDirectory`.
