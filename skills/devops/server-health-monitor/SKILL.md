@@ -510,6 +510,8 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
      - `/security.txt` — RFC 9116 compliance checker / security researcher bot (legitimate, not hostile)
      - `/zc` — short-path scanner probe (origin unknown)
      - `action` or `page-` parameter probes without file extensions — enumeration scanners
+     - **Path traversal probes**: `GET /../../../../../../etc/passwd` — app.log shows as `404错误`, no risk (Flask normalizes paths). Standard internet noise.
+     - **OpenAI API proxy scanners**: `GET /v1/models`, `/v1/embeddings`, `/v1/completions` — probes trying to find exposed OpenAI-compatible API endpoints (e.g., vllm, llama.cpp servers). Harmless when behind auth, but suggests the public IP is being catalogued as a potential AI inference host.
    - **Static file extension brute-force scanner** (observed June 2026, IP 163.7.3.220): A newer scanner class that systematically probes every static JS/CSS file it discovers by appending a sequence of alternative extensions. Unlike the Chinese-targeted probes above (which hit specific router/SCADA paths), this scanner works breadth-first on static files:
      - Target file: `chart`, `xlsx.full.min.js`, `common.js`, `page-prescriptions.js`, `page-`, etc.
      - Extension sequence tried: `.txt` → `.yaml` → `.yml` → `.conf` → `.bak` → `.old` → `.env` → `.php` → `.json` → `.js.map` → `.js.js`
@@ -544,7 +546,7 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
 
  🔍 **Real-world "clean run" baseline** (Gaofang V2, 2026-06-04): Zero application errors, normal gunicorn HUP reload, scanner WARNINGs only. Disk 66%, uptime 2d9h, load ~0.17. Use `references/gaofang-v2-health-check-2026-06-04.md` as a normal-state reference to compare against when investigating anomalies.
 
-12. **Gunicorn HUP reload produces misleading `SIGKILL` / `Perhaps out of memory?` messages on slow workers.** During a SIGHUP reload, the gunicorn master boots new workers then signals old workers to exit. Workers holding database connections or long-polling requests can take the full `--timeout` (default 120s with `gthread`) to clean up. If they don't exit in time, the master sends SIGKILL and logs:
+12. **Gunicorn HUP reload AND max-requests cycling both produce misleading `SIGKILL` / `Perhaps out of memory?` messages on slow workers.** During a SIGHUP reload or max-requests-induced cycle (via `--max-requests N`), the gunicorn master boots new workers then signals old workers to exit. Workers holding database connections or long-polling requests can take the full `--timeout` (default 120s with `gthread`) to clean up. If they don't exit in time, the master sends SIGKILL and logs:
     ```
     [ERROR] Worker (pid:X) was sent SIGTERM!
     [CRITICAL] WORKER TIMEOUT (pid:X)
@@ -552,18 +554,21 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
     ```
     **This is NOT a memory issue — it's the gunicorn worker timeout mechanism during reload.** The "Perhaps out of memory?" message is gunicorn's hardcoded guess and is misleading in this context. The actual cause is the old worker took too long to finish its current request + cleanup. To distinguish a real OOM from reload-induced SIGKILL:
     - **Real OOM**: Workers crash unpredictably throughout the day, not just at restart boundaries. System `dmesg` shows `oom-killer` events. Memory usage climbs before each crash.
-    - **Reload-induced SIGKILL**: Only happens within ~2 minutes of a HUP signal. The surviving new worker(s) are healthy. No `oom-killer` in dmesg. Check `[INFO] Handling signal: hup` or `[INFO] Hang up: Master` timestamps — the SIGKILL will be ~`--timeout` seconds (default 120s) after that. This is a **benign normal reload artifact**.
+    - **Reload-induced SIGKILL**: Only happens within ~2 minutes of a HUP signal or within a max-requests cycle interval. The surviving new worker(s) are healthy. No `oom-killer` in dmesg. Check for either:
+      - `[INFO] Handling signal: hup` or `[INFO] Hang up: Master` timestamps — the SIGKILL will be ~`--timeout` seconds (default 120s) after that.
+      - Or, if no HUP signal is present, look for a cluster of `[INFO] Booting worker` entries followed by `[INFO] Worker exiting` entries — this is max-requests cycling. The pattern is: new workers boot (4x), old workers exit (4x), then `[ERROR] Worker was sent SIGTERM` appears for each old worker that's still holding connections. Same root cause (worker drain timeout), different trigger.
+    This is a **benign normal reload/cycle artifact**.
 
     The `[ERROR] Worker (pid:X) was sent SIGTERM!` messages are also misleading: this is simply gunicorn informing the old worker to exit by sending SIGTERM. It's logged at `[ERROR] level for visibility but is not an error condition. A clean fast reload (all workers exit in under 1-2 seconds) logs the same `SIGTERM` messages.
 
-    **Report guidance**: If the only errors at the reload boundary are `SIGTERM` + `WORKER TIMEOUT` + `SIGKILL` on *old* workers (not new ones), and the new workers booted successfully within 1s of the HUP signal, this is a clean reload with expected slow-worker timeout. Note it in the report but do NOT flag as 🚨 — frame as "scheduled reload completed, old workers took X seconds to drain" rather than "worker crash".
+    **Report guidance**: If the only errors at the reload/cycle boundary are `SIGTERM` + `WORKER TIMEOUT` + `SIGKILL` on *old* workers (not new ones), and the new workers booted successfully within 1s of the event, this is a clean cycle with expected slow-worker timeout. Note it in the report but do NOT flag as 🚨 — frame as "scheduled worker rotation completed, old workers took X seconds to drain" rather than "worker crash". State the trigger (SIGHUP reload vs max-requests N).
 
 13. **Gunicorn log paths in terminal trigger false "long-lived server/watch process" detection.** The command `tail -30 /workspace/projects/drug-distribution-system/gaofang-v2/logs/gunicorn-error.log` gets blocked by Hermes's "foreground command appears to start a long-lived server/watch process" heuristic. The heuristic seems to match on the path pattern `/workspace/projects/.../logs/`. Workarounds:
     - Use `read_file` (from hermes_tools) with offset/limit — always works
     - Use a simpler `cat` command or `ls -la` on the log dir (these don't trigger the heuristic)
 
 ## References
-- `references/gaofang-v2-health-check-2026-06-09.md` — Clean baseline (June 9): ZTE/LTE scanner probes, Nginx error log staleness observation, app.log bot patterns
+- `references/gaofang-v2-health-check-2026-06-11.md` — Clean baseline with max-requests worker cycling (June 11)
 - `references/gaofang-v2-health-check-2026-06-04.md` — Previous clean baseline with HUP reload documentation
 - `references/gaofang-v2-health-check-2026-06-03.md` — Upstream timeout analysis (Scenario B, slow queries)
 - `references/nginx-temp-dir-permissions-diagnosis-session.md` — Nginx temp dir permission bug diagnosis
