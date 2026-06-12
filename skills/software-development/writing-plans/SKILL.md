@@ -11,7 +11,7 @@ metadata:
     related_skills: [subagent-driven-development, test-driven-development, requesting-code-review]
 ---
 
-# Writing Implementation Plans
+# Writing Implementation Plans / Plan Mode
 
 ## Overview
 
@@ -20,6 +20,39 @@ Write comprehensive implementation plans assuming the implementer has zero conte
 Assume the implementer is a skilled developer but knows almost nothing about the toolset or problem domain. Assume they don't know good test design very well.
 
 **Core principle:** A good plan makes implementation obvious. If someone has to guess, the plan is incomplete.
+
+## Plan Mode
+
+When the user wants a **plan instead of execution** (e.g., `/plan` command), switch to plan-only behavior:
+
+### Core Rules
+- **Do not implement code** or edit project files except the plan markdown file.
+- **Do not run mutating terminal commands**, commit, push, or perform external actions.
+- You **may** inspect the repo with read-only commands/tools when needed.
+- Deliverable is a markdown plan saved under `.hermes/plans/`.
+
+### Output Requirements
+Include, when relevant:
+- Goal
+- Current context / assumptions
+- Proposed approach
+- Step-by-step plan (with time estimates per step)
+- 'What's NOT included' section (explicit scope boundaries)
+- Files likely to change
+- Tests / validation
+- Risks, tradeoffs, and open questions
+
+### Save Location
+```
+.hermes/plans/YYYY-MM-DD_HHMMSS-<slug>.md
+```
+
+Treat the path as relative to the active working directory. If the runtime provides a specific target path, use that.
+
+### Interaction Style
+- If the request is clear enough, write the plan directly.
+- If it's genuinely underspecified, ask one brief clarifying question instead of guessing.
+- After saving, reply briefly with what you planned and the saved path.
 
 ## When to Use
 

@@ -523,6 +523,11 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
      - Optionally suggest blocking the IP at Nginx level if volume is >200/day
    These typically appear in small numbers (1-5 hits per path per day) except for the extension brute-force type which can hit 100+ in a burst. Document patterns in the session's reference file so future reports can recognize repeated probes.
    **None of these are application errors.** Do not flag them in reports. If they appear in large volume (>100/day from same IP), optionally suggest firewall rules in the report body, but do NOT mark 🚨.
+
+   A newer scanner variant observed in June 2026 hits **directory listing probes** and **short path names** rather than file extensions:
+   - `/static/chunks/` — requesting directory listing (forbidden by Nginx config)
+   - `/static/lib/js/bottom` — probing if a specific module is exposed as a standalone file
+   - These are single-request probes per path, not bursts. Typically from a fresh IP (e.g., 139.162.91.180) that hasn't been seen before. Same verdict: harmless 404s.
 7. **Anonymous cron execution.** No user present — never ask questions. Make reasonable assumptions and proceed.
 8. **Project path mismatch.** A task may cite `~/user/project/` but the real project lives elsewhere (e.g., `/workspace/projects/.../` or `/www/wwwroot/.../`). Always check the systemd service file first to find the real `WorkingDirectory`.
 9. **Cron time-zone awareness.** The 24-hour error window uses wall-clock time from the cron schedule time. Filter by date pattern `YYYY/MM/DD` (today and yesterday) rather than assuming `tail -N` gives you the right window. Prefer `read_file` on the entire log and scan line-by-line in Python for precise date filtering.
@@ -568,6 +573,7 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
     - Use a simpler `cat` command or `ls -la` on the log dir (these don't trigger the heuristic)
 
 ## References
+- `references/gaofang-v2-health-check-2026-06-12.md` — Clean baseline with SIGHUP reload (June 12), new scanner IP 139.162.91.180
 - `references/gaofang-v2-health-check-2026-06-11.md` — Clean baseline with max-requests worker cycling (June 11)
 - `references/gaofang-v2-health-check-2026-06-04.md` — Previous clean baseline with HUP reload documentation
 - `references/gaofang-v2-health-check-2026-06-03.md` — Upstream timeout analysis (Scenario B, slow queries)

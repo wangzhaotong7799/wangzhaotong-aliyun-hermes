@@ -8,6 +8,29 @@ version: 1.1.0
 
 Configure Hermes Agent to use an external memory provider for persistent cross-session knowledge beyond built-in MEMORY.md / USER.md.
 
+## Architecture Overview
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│  Hermes     │────▶│  OpenViking     │────▶│  Embedding API   │
+│  Agent      │     │  Server :1933   │     │  (SiliconFlow)   │
+│             │◀────│  (context DB)   │◀────│  BAAI/bge-m3     │
+└─────────────┘     └─────────────────┘     └──────────────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │  Workspace Storage │
+                    │  (vector index +   │
+                    │   fs hierarchy)    │
+                    └────────────────────┘
+```
+
+### How memory flows through the system
+
+1. **Session start** — Hermes prefetches relevant memories via OpenViking semantic search
+2. **During session** — conversation turns are synced to the provider
+3. **Session end** — VLM model extracts key facts and writes them to the workspace
+4. **Cross-session** — all providers share the same vector index for retrieval
+
 ## Quick Start
 
 ```bash
