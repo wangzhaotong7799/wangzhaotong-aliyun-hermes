@@ -1,7 +1,7 @@
 ---
 name: token-manager
 description: "Token管家 — 每日 Token 用量统计（TokScale）+ Token 压缩（RTK）一体化管理"
-version: 1.2.0
+version: 1.3.0
 author: Hermes Agent
 metadata:
   hermes:
@@ -181,6 +181,34 @@ FROM sessions GROUP BY day ORDER BY day DESC LIMIT 31;
 | `cost_status` | TEXT | `'unknown'` 表示未配置成本追踪 |
 
 > ⚠️ **注意**：部分模型（如 `deepseek-v4-flash`）可能未配置成本追踪，`estimated_cost_usd` 和 `actual_cost_usd` 为 0。TokScale 有自己的定价逻辑，两者数据可能不一致。
+
+### 1.6 手动费用估算（TokScale 不可用 + DB 费用为 0 时）
+
+当 TokScale 超时且 Hermes DB 的 `estimated_cost_usd = 0` 时，可查询模型名称后使用已知定价手动估算费用。
+
+**查询模型和用量：**
+```bash
+sqlite3 /root/.hermes/state.db "SELECT model, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(cache_read_tokens) as cache_read FROM sessions WHERE date(started_at, 'unixepoch') = date('now', '-1 day') GROUP BY model;"
+```
+
+**估算规则（以 deepseek-v4-flash 为例）：**
+
+| 项目 | 价格（per 1M tokens） |
+|------|:-------------------:|
+| 输入（缓存命中） | **$0.0028** |
+| 输入（缓存未命中） | **$0.14** |
+| 输出 | **$0.28** |
+
+- **缓存命中率的判断**：当 `cache_read_tokens > input_tokens` 时，可合理假设全部输入均为缓存命中价，因为缓存上下文大于当前输入。这是 cron 任务和重复会话中的常见情况。
+- **保守估计**：若想给出中位估算，按 50% 缓存命中率计算（`input * 0.5` 按命中价 + `input * 0.5` 按未命中价 + output 按输出价）。
+- **费用单位**：DeepSeek 官方定价为 USD，直接以 USD 展示。不乘以任何修正系数或汇率。
+- **报告注明**：末尾加注「TokScale 估算，实际以 DeepSeek 官网账单为准」。
+
+**按月累计估算示例：**
+```bash
+# 本月 1 号至昨天的累计
+sqlite3 /root/.hermes/state.db "SELECT SUM(input_tokens), SUM(output_tokens), SUM(cache_read_tokens) FROM sessions WHERE strftime('%Y-%m', started_at, 'unixepoch') = strftime('%Y-%m', 'now', '-1 day') AND date(started_at, 'unixepoch') <= date('now', '-1 day');"
+```
 
 ---
 
@@ -423,7 +451,7 @@ PYEOF
 cat /tmp/tokscale_stderr.txt  # 应为空
 ```
 
-### 6.3 deepseek-v4-flash 官方定价（截至 2026-05-13）
+### 6.3 deepseek-v4-flash 官方定价（截至 2026-06-09，经官方页面再确认）
 
 | 项目 | 价格（per 1M tokens） |
 |------|:-------------------:|
@@ -444,6 +472,7 @@ cat /tmp/tokscale_stderr.txt  # 应为空
 - **缓存命中率高**：DeepSeek 等提供商缓存命中率约 96-98%，实际净 Token 消耗远低于总量
 - **费用数据缺失**：部分模型（如 `deepseek-v4-flash`）在 Hermes DB 中 `cost_status = 'unknown'`，`estimated_cost_usd` 为 0。TokScale 有自己的定价逻辑，两者费用数据可能不一致。参考 6.3 节手动定价。
 - **rtk gain 数据是累计的**：使用 `rtk gain` 不带参数获得的是全量累计统计。日报应使用 `rtk gain --daily` 获取逐日明细。
+- **RTK 数据可能不覆盖昨天**：`rtk gain --daily` 仅显示确实有 RTK 压缩活动的日期。如果某日没有命令行被 RTK 压缩（例如 Hermes 的 `rtk rewrite` 插件未触发），该日就不会出现在 `--daily` 输出中。此时日报应报告累计统计（`rtk gain` 的 TOTAL 行）并注明「昨日无 RTK 数据」。
 - **提供商账单偏差**：TokScale/Hermes DB 的 Token 统计与提供商官网账单的偏差是常态（DeepSeek 约 +36%）。每日报告应注明数据来源和可信度。详见 `references/billing-reconciliation.md`。
 
 ---
@@ -481,13 +510,23 @@ cat /tmp/tokscale_stderr.txt  # 应为空
 
 2. 查询昨日 TokScale 用量明细：
    /root/.hermes/node/bin/tokscale graph --client hermes --since {昨天日期} --until {昨天日期} 2>/dev/null
-   → 如果 TokScale 返回错误或超时，降级到 Hermes DB：
-     sqlite3 /root/.hermes/state.db "SELECT COUNT(*) as sessions, SUM(message_count) as msgs, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(cache_read_tokens) as cache_read, SUM(estimated_cost_usd) as cost FROM sessions WHERE date(started_at, 'unixepoch') = '{昨天日期}';"
+   → 如果 TokScale 返回错误或超时（30s 以上），降级到 Hermes DB：
+     sqlite3 /root/.hermes/state.db "SELECT COUNT(*) as sessions, SUM(message_count) as msgs, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(cache_read_tokens) as cache_read, SUM(cache_write_tokens) as cache_write, SUM(estimated_cost_usd) as cost FROM sessions WHERE date(started_at, 'unixepoch') = '{昨天日期}';"
 
 3. 查询 RTK 压缩节约统计（注意用 --daily）：
    rtk gain --daily 2>/dev/null | tail -5
+   → 如果昨天没数据（RTK 仅记录有压缩活动的日期），用 rtk gain 2>/dev/null 取 TOTAL 行作为累计参考
 
-4. 组装报告，格式如下：
+4. 查询本月累计（本月1号到昨天）：
+   sqlite3 /root/.hermes/state.db "SELECT SUM(input_tokens), SUM(output_tokens), SUM(cache_read_tokens) FROM sessions WHERE strftime('%Y-%m', started_at, 'unixepoch') = '本月' AND date(started_at, 'unixepoch') <= '{昨天日期}';"
+
+5. 如果 TokScale 和 DB 都无 cost 数据（estimated_cost_usd = 0），根据模型名称手动估算：
+   - 从 DB 查 model 名
+   - deepseek-v4-flash 定价：缓存命中 $0.0028/M, 未命中 $0.14/M, 输出 $0.28/M
+   - 当 cache_read > input 时，全部输入按缓存命中价计算（保守最低）
+   - 不乘任何修正系数
+
+6. 组装报告，格式如下：
    📊 Token 日报 · {昨天日期}
    ━━━━ 用量统计 ━━━━
    • 会话数：XX 次
@@ -497,17 +536,18 @@ cat /tmp/tokscale_stderr.txt  # 应为空
 
    ━━━━ 压缩节约 ━━━━
    • 累计压缩率：XX%（已省 XX tokens）
-   • 昨日命令数：XX 条
+   • 昨日命令数：XX 条（若 RTK 无昨日数据，报告累计统计并注明）
 
    ━━━━ 本月累计 ━━━━
    • Token 总量：XX
    • 费用：¥X.XX
 
-5. 重要注意事项：
-   - 费用优先以 CNY（人民币）展示，USD 做参考
+7. 重要注意事项：
+   - 费用优先以 USD 展示（DeepSeek 定价为 USD），不乘汇率转 CNY
    - 报告末尾加注「TokScale 估算，实际以 DeepSeek 官网账单为准」
    - 不要乘任何修正系数（×1.36、×汇率等）
    - 如果 TokScale / DB / RTK 都返回错误，如实报告不编造
+   - TokScale 超时时明确说明「TokScale 超时未响应，降级使用 Hermes DB」
 ```
 
 **旧版模板（仍然可用但不再推荐 — 依赖 skill 加载）：**

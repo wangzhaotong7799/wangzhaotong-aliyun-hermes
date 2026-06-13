@@ -132,7 +132,7 @@ tokscale graph --client hermes --today --json | python3 -c "import json,sys; d=j
 
 ---
 
-## 四、deepseek-v4-flash 官方定价（截至 2026-05-13）
+## 四、deepseek-v4-flash 官方定价（截至 2026-06-09，经官方页面再确认）
 
 | 项目 | 价格（per 1M tokens） |
 |------|:-------------------:|
@@ -140,7 +140,16 @@ tokscale graph --client hermes --today --json | python3 -c "import json,sys; d=j
 | 输入（缓存未命中） | **$0.14** |
 | 输出 | **$0.28** |
 
-> 注意：deepseek-v4-flash 不在 LiteLLM 官方定价数据库（`model_prices_and_context_window.json`）中。TokScale 使用此模型名称查询时找不到条目，会使用 unklown fallback。但 DeepSeek 账单门户按上述定价计费。
+> 注意：deepseek-v4-flash 不在 LiteLLM 官方定价数据库（`model_prices_and_context_window.json`）中。TokScale 使用此模型名称查询时找不到条目，会使用 unknown fallback。但 DeepSeek 账单门户按上述定价计费。
+
+### 手动估算方法
+
+当 Hermes DB 的 `estimated_cost_usd = 0` 且 TokScale 不可用时：
+
+1. **查模型名**：`SELECT model, SUM(input_tokens), SUM(output_tokens), SUM(cache_read_tokens) FROM sessions WHERE ... GROUP BY model`
+2. **判断缓存命中率**：若 `cache_read_tokens > input_tokens`，所有输入视为缓存命中（最低估计）。想给中位值，按 50% 命中率计算。
+3. **套用定价**：缓存命中 $0.0028/M, 未命中 $0.14/M, 输出 $0.28/M
+4. **不乘修正系数**：展示原始美元数字，不加汇率转换。
 
 ### 自定义 Hermes 成本配置
 
