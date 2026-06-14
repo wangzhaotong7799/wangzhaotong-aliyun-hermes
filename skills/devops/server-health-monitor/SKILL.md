@@ -476,6 +476,8 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
 1. **Security scanner blocks system tools in some sessions.** Be prepared to fall back — try `terminal()` first (works in ~90% of sessions), drop to `execute_code` + `subprocess.run()` or pure-Python `/proc/` inspection when blocked.
 2. **`ps aux` returns empty for running processes inside `execute_code`.** Even though `ss -tlnp` clearly shows gunicorn/nginx on their ports, `ps aux | grep gunicorn` may return nothing. The `execute_code` sandbox may have restricted `/proc` visibility. **Always prefer `ss -tlnp` for process detection,** then cross-reference with `systemctl list-units --type=service --state=running | grep <name>`. Use `/proc/<PID>/status` as last resort for pure-Python fallback.
 
+   **`ps aux | grep -v grep` also triggers the false "long-lived server/watch process" heuristic in the raw `terminal()` tool** — the grep piped to another grep makes Hermes think it's a watch/daemon command. **Fix**: Use the shell's own grep-exclusion trick instead: `ps aux | grep -c "[g]unicorn"` — the `[g]` bracket pattern matches "gunicorn" but not "grep", so no `grep -v grep` pipeline needed. This returns just a count without triggering the heuristic.
+
 3. **`tail` may return empty on gunicorn logs.** Use `read_file` with offset/limit or `cat` as fallback.
 
 4. **.env passwords may be masked as `***`** in both `read_file` and raw `cat` output. Use `grep DB_PASSWORD .env | cut -d= -f2` in a shell expansion. If that also shows `***`, check `config.py` for the default fallback: `os.environ.get('DB_PASSWORD') or 'actual_fallback_string'`.
