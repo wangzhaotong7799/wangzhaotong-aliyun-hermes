@@ -524,6 +524,17 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
      - **Not a real threat** — these files don't exist on the server, and the scanner is probing blindly
      - Optionally suggest blocking the IP at Nginx level if volume is >200/day
    These typically appear in small numbers (1-5 hits per path per day) except for the extension brute-force type which can hit 100+ in a burst. Document patterns in the session's reference file so future reports can recognize repeated probes.
+
+   - **Multi-protocol enumeration scanner** (observed June 2026, IP 47.92.103.100, Alibaba cross-region): A scanner that hits port 80 with **7+ different protocol probes** in rapid succession (30s–6min window). This is not a single-vector scanner — it tries RTSP, SMTP, Redis, Memcached, SIP, nmap RDP, and raw binary bytes against the same HTTP listener. Recognizable patterns in gunicorn error log:
+   - `RTSP/1.0` — streaming protocol probe
+   - `EHLO` → `HELP` — SMTP greeting chain
+   - `*1` → `show info` — Redis/Memcached enumeration
+   - `stats` → `serverstatus` — Memcached/Apache probes
+   - `SIP/2.0` — VoIP/VoIP scanner
+   - `\x03\x00...Cookie: mstshash=nmap` — nmap RDP scan on port 80
+   - Empty/blank request lines
+   - Sequence typically lasts under 6 minutes from a single IP, then the IP is never seen again.
+   **All return 400 from Gunicorn.** No risk. Do not flag.
    **None of these are application errors.** Do not flag them in reports. If they appear in large volume (>100/day from same IP), optionally suggest firewall rules in the report body, but do NOT mark 🚨.
 
    A newer scanner variant observed in June 2026 hits **directory listing probes** and **short path names** rather than file extensions:
@@ -575,7 +586,8 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
     - Use a simpler `cat` command or `ls -la` on the log dir (these don't trigger the heuristic)
 
 ## References
-- `references/gaofang-v2-health-check-2026-06-12.md` — Clean baseline with SIGHUP reload (June 12), new scanner IP 139.162.91.180
+- `references/gaofang-v2-health-check-2026-06-15.md` — Clean baseline with SIGHUP reload and multi-protocol scanner (47.92.103.100), June 15
+- `references/gaofang-v2-health-check-2026-06-14.md` — Clean baseline with SIGHUP reload (June 14), new scanner IP 139.162.91.180
 - `references/gaofang-v2-health-check-2026-06-11.md` — Clean baseline with max-requests worker cycling (June 11)
 - `references/gaofang-v2-health-check-2026-06-04.md` — Previous clean baseline with HUP reload documentation
 - `references/gaofang-v2-health-check-2026-06-03.md` — Upstream timeout analysis (Scenario B, slow queries)
