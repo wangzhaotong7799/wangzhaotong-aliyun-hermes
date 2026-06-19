@@ -463,6 +463,81 @@ tail -f /www/wwwlogs/your-site_error.log
 
 ---
 
+## 三、从面板解绑转为独立运行（完整三阶段指南）
+
+> **吸收自** `bt-panel-remove-site-standalone-run`（独立运行和清理完整流程）
+
+### 核心发现：双 Nginx 共存
+
+宝塔环境存在两套 Nginx 系统：
+
+- **系统 Nginx** (`systemctl nginx`): 路径 `/etc/nginx/`
+- **宝塔 Nginx** (`/www/server/nginx/sbin/nginx`): 路径 `/www/server/nginx/`
+
+配置文件被 include 的位置：`/www/server/nginx/conf/nginx.conf → /www/server/panel/vhost/nginx/*.conf`
+
+### Stage 1：配置移至独立运行
+
+```bash
+# 备份原配置
+cp /www/server/panel/vhost/nginx/your-site.conf /root/your-site.conf.bak
+
+# 移至独立位置（推荐方案 B）
+mv /www/server/panel/vhost/nginx/your-site.conf /etc/nginx/conf.d/your-site.conf
+
+# 或在主配置中添加 include
+sed -i '/^include \/www\/server\/panel\/vhost\/nginx\/\*\.conf;$/a include /etc/nginx/conf.d/your-site.conf;' /www/server/nginx/conf/nginx.conf
+
+# 验证并重载
+/www/server/nginx/sbin/nginx -t && /www/server/nginx/sbin/nginx -s reload
+```
+
+### Stage 2：切换至系统 Nginx（完全脱离宝塔二进制）
+
+**前置条件：** 已完成 Stage 1。**目标：** 切换为系统包 `/usr/sbin/nginx`。
+
+```bash
+# 安装系统 Nginx
+yum install -y nginx
+
+# 修改运行用户为 www（保持和宝塔一致）
+sed -i 's/^user nginx;/user www www;/' /etc/nginx/nginx.conf
+
+# 零停机切换
+kill -QUIT $(cat /www/server/nginx/logs/nginx.pid)
+sleep 1
+systemctl start nginx
+systemctl enable nginx
+
+# 验证
+readlink -f /proc/$(cat /run/nginx.pid)/exe  # → /usr/sbin/nginx
+```
+
+### Stage 3：清理宝塔残留
+
+**必须保留：** `/www/server/mysql/`（二进制）、`/www/server/data/`（MySQL 数据）、`/www/server/php/`（PHP-FPM）
+**可安全删除：** `/www/server/nginx/`、`/www/server/panel/`、`/www/server/cron/`、`/www/server/phpmyadmin/`、`/www/server/site_total/`
+
+```bash
+# 先排查哪些目录还在用
+ps aux | grep -E '[m]ysqld|[p]hp-fpm|[n]ginx'
+
+# 确认 MySQL 数据目录位置
+ps aux | grep '[m]ysqld' | grep -oP 'datadir[= ][^ ]+'
+
+# 执行安全清理
+rm -rf /www/server/nginx/ /www/server/panel/ /www/server/cron/
+rm -rf /www/server/phpmyadmin/ /www/server/site_total/
+```
+
+### 常见问题
+
+| 问题 | 排查 |
+|------|------|
+| 配置修改后不生效 | 使用 `nginx -s reload`（宝塔 Nginx），非 `systemctl reload nginx`（系统 Nginx） |
+| 返回 403 Forbidden | 检查配置语法、日志 `tail -f /www/wwwlogs/error.log` |
+| MySQL 数据目录丢失 | 参看 ps 命令确认实际 `datadir` 位置，默认 `/www/server/data/` |
+
 ## ⚠️ 注意事项
 
 1. **数据库操作风险**：直接修改宝塔数据库可能导致面板异常，建议先备份：
