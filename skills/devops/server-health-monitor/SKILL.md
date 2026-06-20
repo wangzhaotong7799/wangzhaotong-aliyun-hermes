@@ -514,9 +514,12 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
      - `action` or `page-` parameter probes without file extensions — enumeration scanners
      - **Path traversal probes**: `GET /../../../../../../etc/passwd` — app.log shows as `404错误`, no risk (Flask normalizes paths). Standard internet noise.
      - **OpenAI API proxy scanners**: `GET /v1/models`, `/v1/embeddings`, `/v1/completions` — probes trying to find exposed OpenAI-compatible API endpoints (e.g., vllm, llama.cpp servers). Harmless when behind auth, but suggests the public IP is being catalogued as a potential AI inference host.
-   - **Static file extension brute-force scanner** (observed June 2026, IP 163.7.3.220): A newer scanner class that systematically probes every static JS/CSS file it discovers by appending a sequence of alternative extensions. Unlike the Chinese-targeted probes above (which hit specific router/SCADA paths), this scanner works breadth-first on static files:
+   - **Static file extension brute-force scanner** (observed June 2026, IPs 163.7.3.220, 172.104.140.44): A scanner class that systematically probes every static JS/CSS file it discovers by appending a sequence of alternative extensions. Unlike the Chinese-targeted probes above (which hit specific router/SCADA paths), this scanner works breadth-first on static files:
+     - **Extension brute-force variant** (163.7.3.220, June 10): Probes `.txt` → `.yaml` → `.yml` → `.conf` → `.bak` → `.old` → `.env` → `.php` → `.json` → `.js.map` → `.js.js` on each discovered static file.
      - Target file: `chart`, `xlsx.full.min.js`, `common.js`, `page-prescriptions.js`, `page-`, etc.
      - Extension sequence tried: `.txt` → `.yaml` → `.yml` → `.conf` → `.bak` → `.old` → `.env` → `.php` → `.json` → `.js.map` → `.js.js`
+     - **Chart.js module enumeration variant** (172.104.140.44, June 20): Targets Chart.js-specific internals — probes for `.map` files (`chart.umd.min.js.map`), Chart.js plugin names in hex color notation (`cd853f`, `cd5c5c`, `db7093`), and Chart.js component paths (`/static/lib/js/circle`, `/static/lib/js/circumference`, `/static/lib/js/tooltip`, `/static/lib/js/logarithmic`, `/static/lib/js/bottom`, `/static/lib/js/bottomRight`, `/static/lib/js/bottomLeft`). Also probes `/static/chunks/`, `/static/js/admin`, `/static/js/application/json`. All return 404. Harmless.
+     - **Directory listing probe variant** (139.162.91.180, June 11): Requests `/static/chunks/`, `/static/lib/js/bottom` as standalone files. Single-request probes per path, not bursts. Same verdict: harmless 404s.
      - Volume: **100-200 requests in a single burst** (observed: 122 in ~6 minutes from one IP)
      - Source: typically a single IP rather than distributed
      - Harmless (all return 404), but creates significant log noise that can obscure real errors
@@ -586,6 +589,7 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
     - Use a simpler `cat` command or `ls -la` on the log dir (these don't trigger the heuristic)
 
 ## References
+- `references/gaofang-v2-health-check-2026-06-20.md` — Clean baseline with Chart.js module enumeration scanner (172.104.140.44), June 20
 - `references/gaofang-v2-health-check-2026-06-15.md` — Clean baseline with SIGHUP reload and multi-protocol scanner (47.92.103.100), June 15
 - `references/gaofang-v2-health-check-2026-06-14.md` — Clean baseline with SIGHUP reload (June 14), new scanner IP 139.162.91.180
 - `references/gaofang-v2-health-check-2026-06-11.md` — Clean baseline with max-requests worker cycling (June 11)
