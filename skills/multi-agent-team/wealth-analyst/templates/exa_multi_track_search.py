@@ -83,7 +83,7 @@ for query, note, num in TRACKS:
             title_2026 = bool(re.search(r'2026', title))
             title_2025 = bool(re.search(r'2025', title))
             # (3) 正文日期
-            text_2026 = bool(re.search(r'2026[年\.\-/]', full_for_check[:300]))
+            text_2026 = bool(re.search(r'2026[年./\-]', full_for_check[:300]))
 
             # 综合判定 - 优先信任URL > 标题 > 正文
             if url_2026:

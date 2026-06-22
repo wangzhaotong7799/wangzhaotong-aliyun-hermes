@@ -260,6 +260,9 @@ from hermes_tools import read_file  # not available, use terminal with cat | tai
 
 ### Step 4: Database Connectivity
 
+**Recommended: source .env for credential loading (prevents masking):**
+Use `source .env && $venv_python -c '...'` in a single shell command. The password is loaded into shell env vars, never echoed. Confirmed on Gaofang V2 (2026-06-22).
+
 **Quick check (no auth needed):**
 ```python
 import subprocess
@@ -589,6 +592,7 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
     - Use a simpler `cat` command or `ls -la` on the log dir (these don't trigger the heuristic)
 
 ## References
+- `references/gaofang-v2-health-check-2026-06-22.md` — Clean baseline with zero 24h errors, normal SIGHUP reload, no new scanner IPs. DB connection via `source .env` pattern, June 22
 - `references/gaofang-v2-health-check-2026-06-20.md` — Clean baseline with Chart.js module enumeration scanner (172.104.140.44), June 20
 - `references/gaofang-v2-health-check-2026-06-15.md` — Clean baseline with SIGHUP reload and multi-protocol scanner (47.92.103.100), June 15
 - `references/gaofang-v2-health-check-2026-06-14.md` — Clean baseline with SIGHUP reload (June 14), new scanner IP 139.162.91.180
