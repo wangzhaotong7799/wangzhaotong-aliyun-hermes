@@ -1,9 +1,10 @@
 {
-  "updated_at": "2026-06-25T10:28:44.383855",
+  "updated_at": "2026-06-25T22:56:40.543860",
   "platforms": {
     "telegram": [],
     "discord": [],
     "whatsapp": [],
+    "whatsapp_cloud": [],
     "slack": [],
     "signal": [],
     "mattermost": [],
@@ -57,10 +58,13 @@
     "bluebubbles": [],
     "qqbot": [],
     "yuanbao": [],
+    "relay": [],
     "google_chat": [],
     "irc": [],
     "line": [],
     "ntfy": [],
+    "photon": [],
+    "raft": [],
     "simplex": [],
     "teams": []
   }

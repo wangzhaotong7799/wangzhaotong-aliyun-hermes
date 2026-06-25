@@ -1,7 +1,7 @@
 ---
 name: wealth-analyst
 description: 金脉小队总指挥 - 调度多Agent全流程：数据采集→评分建模→策略分析→报告生成→平台交付
-version: 2.5.0
+version: 2.6.0
 author: wangzhaotong7799
 tags: [strategy, domain-analysis, market-research, team-orchestration, multi-agent]
 toolsets_required: ['terminal', 'file']
@@ -121,6 +121,40 @@ delegate_task(
   skills=['gold-miner-sky']
 )
 ```
+
+**🎯 并行采集模式（v2.6 新增）** — 使用 `delegate_task(tasks=[...])` 批量模式，最多 3 路并发。
+
+当赛道数 ≥ 6 或 Cron prompt 包含 `PARALLEL_COLLECTION` 标记时，将赛道拆成 2-3 组并行采集，大幅缩短耗时：
+
+```
+# 将赛道列表拆成 2-3 组（自动均匀分配），同时启动并发采集
+delegate_task(
+  tasks=[
+    {goal: "采集第1组赛道数据 + 平台政策", context: "赛道列表A...", toolsets=['web'], skills=['gold-miner-sky']},
+    {goal: "采集第2组赛道数据 + 失败案例", context: "赛道列表B...", toolsets=['web'], skills=['gold-miner-sky']},
+    {goal: "采集第3组赛道数据 + 补充搜索", context: "赛道列表C...", toolsets=['web'], skills=['gold-miner-sky']},
+  ]
+)
+# batch 模式：tasks 数组最多 3 项，系统自动并发执行
+# 所有任务完成后统一返回结果数组，父Agent继续后续阶段
+```
+
+**分组策略参考：**
+
+| 分组 | 10赛道电商域示例 | 8赛道自媒体域示例 | 6赛道CPS域示例 |
+|:---|:---|:---|:---|
+| 第1组 | 淘宝/天猫/京东/拼多多白牌 + 平台政策 | 短剧/本地生活/教育知识 + 平台政策 | 外卖CPS/电商CPS/本地生活CPS + 平台政策 |
+| 第2组 | 抖音/快手/视频号电商 + 失败案例 | 美妆/美食/母婴 + 失败案例 | 金融CPS/游戏CPS/社交电商 + 失败案例 |
+| 第3组 | 小红书/微信私域/TikTok Shop + 补充搜索 | 数码/健身 + 补充搜索 | —（2组足够） |
+| 耗时 | 3路并行 → ~1.5min | 3路并行 → ~1.5min | 2路并行 → ~1min |
+
+**数据聚合**：三路结果返回后，合并为一个数据集，统一执行年份验证闸门（阶段三）。后续评分/策略/报告流程不变。
+
+**⚠️ 限制：**
+- batch 模式最多 3 项 tasks，超过会被截断
+- 不需要第3组时只用 2 组即可
+- 每组 tasks 的 context 要带上完整的域参数+赛道列表，确保子Agent自包含
+- 父Agent等待所有 tasks 返回后才继续，不阻塞其他操作
 
 注：天网已配置 Firecrawl + Exa + Tavily 三引擎，自动选择可用引擎采集。
 单次采集数据量约 200-300 条记录，等待返回结构化数据。
