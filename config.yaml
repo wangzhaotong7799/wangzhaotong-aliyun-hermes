@@ -291,7 +291,11 @@ display:
   tool_progress_overrides: {}
   tool_preview_length: 0
   ephemeral_system_ttl: 0
-  platforms: {}
+  platforms:
+    telegram:
+      streaming: true
+    discord:
+      streaming: false
   runtime_footer:
     enabled: false
     fields:
@@ -345,6 +349,11 @@ stt:
     model: whisper-1
   mistral:
     model: voxtral-mini-latest
+  elevenlabs:
+    model_id: scribe_v2
+    language_code: ''
+    tag_audio_events: false
+    diarize: false
 voice:
   record_key: ctrl+b
   max_recording_seconds: 120
@@ -398,6 +407,7 @@ curator:
   min_idle_hours: 2
   stale_after_days: 30
   archive_after_days: 90
+  prune_builtins: true
   backup:
     enabled: true
     keep: 5
@@ -443,15 +453,17 @@ approvals:
   mcp_reload_confirm: true
   destructive_slash_confirm: false
 command_allowlist:
-- stop/restart system service
-- kill hermes/gateway process (self-termination)
 - delete in root path
-- copy/move file into system config path
-- overwrite system file via redirection
-- in-place edit of system config
-- script execution via heredoc
 - overwrite system config
+- copy/move file into system config path
+- script execution via heredoc
+- in-place edit of system config
 - stop/restart hermes gateway (kills running agents)
+- recursive delete
+- stop/restart system service
+- overwrite system file via redirection
+- kill hermes/gateway process (self-termination)
+- overwrite project env/config file
 - script execution via -e/-c flag
 quick_commands: {}
 hooks: {}
@@ -517,6 +529,13 @@ gateway:
   media_delivery_allow_dirs: []
   trust_recent_files: true
   trust_recent_files_seconds: 600
+streaming:
+  enabled: false
+  transport: auto
+  edit_interval: 0.8
+  buffer_threshold: 24
+  cursor: " \u2589"
+  fresh_final_after_seconds: 60.0
 sessions:
   auto_prune: false
   retention_days: 90
@@ -558,8 +577,6 @@ session_reset:
   idle_minutes: 1440
   at_hour: 4
 group_sessions_per_user: true
-streaming:
-  enabled: false
 platform_toolsets:
   cli:
   - hermes-cli
