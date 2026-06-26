@@ -1,6 +1,6 @@
 ---
 name: index-valuation-analysis
-version: 1.1.0
+version: 1.3.0
 description: 指数估值分析全流程 — 当前PE/PB/百分位采集 + 温度标签 + 历史频次/持续期统计
 triggers:
   - "各大指数估值分位点"
@@ -12,6 +12,21 @@ triggers:
   - "每日指数估值"
   - "指数日报"
   - "估值日报"
+  - "恐贪指数"
+  - "恐惧贪婪指数"
+  - "市场情绪"
+metadata:
+  hermes:
+    tags: [data-science, 指数估值, PE, PB, 百分位, 恐贪指数]
+    blueprint:
+      schedule: "30 7 * * *"
+      deliver: feishu:oc_10d032f2e5b7b86d660945627d981888
+      prompt: "生成每日 A股+全球指数估值分位点报告，并给出投资分析建议，同时采集市场恐惧贪婪指数。数据日期为今天。按 SKILL.md 中的完整流程执行。"
+      skills: [index-valuation-analysis]
+      toolsets: [web, terminal, file, browser]
+      model:
+        provider: deepseek
+        model: deepseek-v4-flash
 ---
 
 # 指数估值分析 Skill
@@ -220,19 +235,89 @@ def analyze_threshold(pdf, threshold):
 
 5. **蛋卷基金详情页**：单指数详情页(dj-valuation-table-detail/)需要浏览器渲染才能加载数据，web_extract拿不到数据。改用估值中心首页(value-center)的大表。
 
-6. **AKShare安装**：`pip install akshare` 可能较慢（~30-60秒），耐心等待。
+6. **🆕 ⚠️ 蛋卷基金首页大表 web_extract 截断陷阱！** `web_extract` 对蛋卷基金估值中心首页返回的数据经常被**截断/总结**，只列出极低估或极高估的少数指数，导致大多数指数（如恒生科技、沪深300等）的数据被遗漏或错位。**2026-06-26曾因此将恒生科技误报为PE=26.59/PE百分位=8.80%，实际为PE=21.86/PE百分位=23.43%。**
+   **解决方案：必须使用 browser 工具读取完整 DOM。** 具体步骤：
+   a. `browser_navigate` 到 `https://danjuanfunds.com/djmodule/value-center`
+   b. `browser_console` 执行 JavaScript 提取完整数据表
+   c. 支持代码示例（见下方）
+   d. Cron 中必须添加 `browser` 到 `enabled_toolsets`
+   
+   JavaScript DOM 提取代码（备选方案）：
+   ```javascript
+   // 方案A - 按 MuiTableRow 结构提取
+   (()=>{
+     const rows = document.querySelectorAll('[class*="MuiTableRow"]');
+     let result = '';
+     rows.forEach((row, i) => {
+       const cols = row.querySelectorAll('td, th, [class*="MuiTableCell"]');
+       if (cols.length) {
+         const vals = Array.from(cols).map(c => c.textContent.trim().replace(/\s+/g, ' '));
+         result += `Row${i}: ${vals.join(' | ')}\n`;
+       }
+     });
+     return result;
+   })()
+   
+   // 方案B - 按 index name + value rows 结构提取
+   (()=>{
+     const wrapper = document.querySelector('[class*="value-center"]') || document.querySelector('[class*="table"]');
+     if (!wrapper) return 'wrapper not found';
+     return wrapper.textContent.replace(/\\s+/g, ' ').trim();
+   })()
+   ```
+   
+   **备用降级方案：** 如果浏览器获取失败，对每个缺失指数单独用 web_search 搜索补数据，标注来源和日期。
 
-7. **🆕 内存限制**：AKShare全量数据+滚动百分位计算在1.8GB RAM服务器上可能耗尽内存（约5000行×遍历运算）。缓解策略：
+   **数据完整性强制验证：** 蛋卷完整表有 50+ 行指数。浏览器提取后立即检查返回行数——如果少于 20 行或只有极值指数，说明数据被截断，必须切换方法或逐指数搜索补全。禁止在数据不全时自行脑补数值！
+
+7. **AKShare安装**：`pip install akshare` 可能较慢（~30-60秒），耐心等待。
+
+8. **内存限制**：AKShare全量数据+滚动百分位计算在1.8GB RAM服务器上可能耗尽内存（约5000行×遍历运算）。缓解策略：
    - 不要同时加载多个指数
    - 考虑抽样（如取周度数据代替日度）
    - 如果用execute_code或terminal报ENOMEM，先检查free -h
    - 如果内存不足，改用已整理好的月度数据估算
 
-8. **创业板指 vs 创业板50**：AKShare的`stock_index_pe_lg`不支持"创业板指"，只能用"创业板50"（399673）近似替代。两者成分股和走势接近但不完全相同，输出必须说明"参考：创业板50指数"。
+9. **创业板指 vs 创业板50**：AKShare的`stock_index_pe_lg`不支持"创业板指"，只能用"创业板50"（399673）近似替代。两者成分股和走势接近但不完全相同，输出必须说明"参考：创业板50指数"。
 
-9. **科创50数据限制**：2020年7月才成立，仅约6年历史，无法做10年滚动百分位。统计频次意义有限，输出时应提示"历史太短，统计参考价值有限"。
+10. **科创50数据限制**：2020年7月才成立，仅约6年历史，无法做10年滚动百分位。统计频次意义有限，输出时应提示"历史太短，统计参考价值有限"。
 
-10. **CEIC Data作为补充**：ceicdata.com有沪深300每日PE_TTM数据（2008-10-23至今），但需付费订阅。可作为交叉验证参考。
+11. **CEIC Data作为补充**：ceicdata.com有沪深300每日PE_TTM数据（2008-10-23至今），但需付费订阅。可作为交叉验证参考。
+
+---
+
+## 🌡️ 恐贪指数（Fear & Greed Index）采集
+
+**用户指定：以韭圈儿 (funddb.cn) 的 A 股恐贪指数为准。** 已通过反向工程 API 打通，无需登录。
+
+### 数据源
+
+| 来源 | URL | 状态 | 说明 |
+|:--|:--|:--:|:--|
+| **韭圈儿**（用户首选） | 见参考文档 | ✅ 可用 | A股六大情绪因子，AES-256 解密后获取 |
+| alternative.me（备用） | api.alternative.me/fng/?limit=1 | ⚠️ 备用 | CNN口径，美股市场情绪。仅当韭圈儿不可用才回退 |
+
+### 采集方法
+
+使用专用解密脚本：
+
+```bash
+python3 /root/.hermes/scripts/jiucai_fear_index.py --simple
+```
+
+完整解密参数和接口链路见 `references/jiucai-fear-greed-api.md`。
+
+### 分类标签
+
+| 数值区间 | 标签 |
+|:--:|:--|
+| 0-24 | 🟣 极恐 |
+| 25-44 | 🟠 恐惧 |
+| 45-55 | ⚪ 中性 |
+| 56-74 | 🟡 贪婪 |
+| 75-100 | 🟢 极贪 |
+
+**注意事项：** 韭圈儿恐贪指数与 CNN Fear & Greed Index 的算法不同（韭圈儿基于A股6个情绪因子，CNN基于美股7个因子），数值不能直接对比。用户明确以韭圈儿为准，但目前技术通路阻塞，待用户提供可行取数方式后切换。
 
 ---
 
@@ -242,10 +327,37 @@ def analyze_threshold(pdf, threshold):
 
 ### 数据采集
 
-使用 `web_extract` 访问蛋卷基金估值中心首页：
-`https://danjuanfunds.com/djmodule/value-center`
+**⚠️ 必须使用 browser 工具，不能仅依赖 web_extract！**
+web_extract 对蛋卷首页大表经常截断/总结，导致数据缺失或错位。
 
-该页面返回完整估值表（PE/PB/百分位/股息率/ROE），`web_extract` 可直接解析，无需浏览器渲染。
+1. 使用 `browser_navigate` 访问 `https://danjuanfunds.com/djmodule/value-center`
+2. 使用 `browser_console` 执行 JavaScript 提取完整 DOM 数据表
+3. 逐行解析，按索引名称匹配 PE/百分位数值
+
+备用降级：若浏览器获取失败，对每个缺失指数单独用 `web_search` 搜索补数据，标注来源和日期。
+
+### 采集恐贪指数
+
+**数据源：韭圈儿恐贪指数（funddb.cn）**
+
+使用脚本 `/root/.hermes/scripts/jiucai_fear_index.py` 采集：
+
+```bash
+# 简洁输出
+python3 /root/.hermes/scripts/jiucai_fear_index.py --simple
+# → "72 贪婪"
+
+# 完整 JSON 输出
+python3 /root/.hermes/scripts/jiucai_fear_index.py
+```
+
+**接口链路：**
+1. `https://funddb.cn/meta_info/toolfear.json` — SEO 元数据（连通性验证）
+2. `https://api.jiucaishuo.com/v2/kjtl/getbasedata` — AES-256-CBC 加密的实时数据
+3. 解密参数：Key=`K_B+"ll1"`, IV=`K_A+"ll1"`, AES-256-CBC/PKCS7
+   - `K_A = "bvroqevdjqibsdkq"`
+   - `K_B = "eveqocftukbotqjcequcnkrqlw1oi"`
+4. 恐贪指数分类：0-24 极恐 | 25-44 恐惧 | 45-55 中性 | 56-74 贪婪 | 75-100 极贪
 
 ### 追踪指数列表
 
@@ -312,7 +424,7 @@ A股方面：(结构性机会)
 ### 定时任务
 
 cron 表达式：`30 7 * * *`（每天07:30，A股开盘前2小时）
-toolsets：`['web', 'terminal', 'file']`
+toolsets：`['web', 'terminal', 'file', 'browser']`
 deliver：飞书私聊
 
 ---
@@ -322,3 +434,4 @@ deliver：飞书私聊
 - `references/csi300-pe-history.md` — 沪深300历史PE数据及百分位统计分析
 - `references/data-sources.md` — 各数据源特点与可信度说明
 - `references/chuangyeban-kc50-analysis.md` — 创业板指 & 科创50 PE百分位分析（2026-06-18）
+- `references/jiucai-fear-greed-api.md` — 韭圈儿恐贪指数API反向工程记录（含SPA API通用方法论）

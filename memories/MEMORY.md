@@ -4,11 +4,11 @@ Hermes Agent 模型选择器（⚙ Model Picker）对 custom_providers 只提取
 §
 Token管家技能: token-manager(devops/)。TokScale+RTK已就绪，全局Hook已装。含每日08:00 cron日报任务+配套脚本+多智能体自助安装指引。SKILL.md已推送GitHub。
 §
-数据质量铁律加固(2026-05-04)：三份周报Cron只采2026年数据、标注data_year、严禁改年份。猎财SOP新增年份验证闸门——剔除<2026数据，篡改即中断。天网输出新增collected_at/source_publish_date/data_year字段。
+数据质量铁律加固(2026-05-04)：三份周报Cron只采2026年数据、标注data_year、严禁改年份。猎财SOP新增年份验证闸门。韭圈儿恐贪指数(2026-06-26接入)：加密AES-256-CBC，解密Key=K_B+ll1, IV=K_A+ll1。脚本~/.hermes/scripts/jiucai_fear_index.py。蛋卷表web_extract截断陷阱已修——Cron改用browser DOM+js取数。
 §
 铁律第7条「宝塔面板不动原则」：任何时候严禁修改宝塔面板的任何代码文件（/www/server/panel/ 下的源码、前端、配置文件、数据库、模板）。仅限于通过 Web 界面管理。严禁直接编辑面板代码或操作面板 SQLite 数据库。配置修改必须通过宝塔 Web 界面或官方 API。
 §
-天网增强采集(累计集成)：① Agent-Reach v1.4.0(微博/微信/B站/V2EX/雪球/YouTube/GitHub) ② union-search-skill(百度/搜狗/360/头条等30+引擎免API) ③ Scrapling v0.4.8(过Cloudflare自适应反爬框架)。天网skill已升级v1.3，新增方法D(Scrapling)。天网在gold-miner-sky SKILL.md。抖音/小红书直接API需Cookie/TikHub Token，当前用间接采集(搜外部报道)。
+天网增强采集：Agent-Reach v1.4.0+union-search-skill(30+引擎免API)+Scrapling v0.4.8(过Cloudflare)。天网skill v1.3，在gold-miner-sky。抖音/小红书用间接采集。
 §
 膏方V2导入规则：状态默认「欠药」，是否传方默认「已传方」，医助默认为"-"（允许为空），电话号码允许为空。遇到重复代煎号则覆盖更新（保留复诊/审计字段），不跳过。列表排序用户坚持按 id 降序。
 §
@@ -51,3 +51,5 @@ hermes-online-notify.service 脚本在 /root/.hermes/scripts/hermes-online-notif
 Nginx临时目录权限修复(2026-06-02)：/var/lib/nginx/和/var/lib/nginx/tmp/要771(o+x)让www用户遍历。已复发两次，已设cronjob默认每6小时修复（chmod 771 /var/lib/nginx /var/lib/nginx/tmp）。先手动修复后设cron。
 §
 Token管家 cron 故障修复(2026-06-09)：三个根因—①deepseek-v4-flash不在LiteLLM定价库中，TokScale报JSON parse failed，已手动加入缓存（输入$0.14/M、缓存命中$0.0028/M、输出$0.28/M）；②SKILL.md 30K+字符加载到cron上下文导致agent无响应，已改用自包含prompt(无skills加载)；③rtk gain误用累计参数，已改为rtk gain --daily。修复后TokScale无警告正常运行，定价缓存已更新到~/.config/tokscale/cache/pricing-litellm.json。token-manager技能已升级v1.2.0。
+§
+主人会自己打开浏览器F12 Network面板找API请求并截图配合逆向工程，技术动手能力强。偏好直接给信息而非一步步解释。
