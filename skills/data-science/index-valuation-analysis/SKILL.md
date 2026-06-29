@@ -21,7 +21,16 @@ metadata:
     blueprint:
       schedule: "30 7 * * *"
       deliver: feishu:oc_10d032f2e5b7b86d660945627d981888
-      prompt: "生成每日 A股+全球指数估值分位点报告，并给出投资分析建议，同时采集市场恐惧贪婪指数。数据日期为今天。按 SKILL.md 中的完整流程执行。"
+      prompt: "生成每日 A股+全球指数估值分位点报告，并给出投资分析建议。
+
+**必须执行以下两项：**
+
+1. **指数估值** — 按 SKILL.md 完整流程采集蛋卷基金估值中心数据（必须用 browser 工具取完整 DOM）
+2. **韭圈儿恐贪指数（必须）** — 运行命令采集：
+   python3 /root/.hermes/scripts/jiucai_fear_index.py --simple
+   分类：0-24=极恐 25-44=恐惧 45-55=中性 56-74=贪婪 75-100=极贪
+
+数据日期为今天。"
       skills: [index-valuation-analysis]
       toolsets: [web, terminal, file, browser]
       model:

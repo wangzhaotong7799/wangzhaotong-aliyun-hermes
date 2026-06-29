@@ -213,3 +213,5 @@ with open("data/raw.md", "w") as f:
 4. **API key 读取方式** — `source ~/.hermes/.env` 只在当前shell有效。推荐用 `grep EXA_API_KEY ~/.hermes/.env | cut -d= -f2` 或 Python 逐行解析
 5. **写文件用 write_file 而非 echo/cat heredoc** — write_file 自动创建目录，无安全扫描问题
 6. **年份验证闸门必须读 JSON 而非 Markdown** — JSON 文件中的 `track` 字段是可靠的赛道归属标识。Markdown 文件中的 `## ` 标题行可能被文本预览中的假标题污染。年份验证脚本统一用 `json.load(open("data/raw.json"))` 读取，不要用 `re.split("## ", markdown_text)` 解析赛道归属。
+7. **36kr URL ID 区间可辅助年份判定** — `36kr.com/p/{id}` 中 ID≥37 亿的条目几乎都是 2025-2026 年内容。当 publishedDate 缺失时，可用此启发式批量修复 36kr 来源的无日期数据。2026-06-29 验证：通过此规则修复了 13 条 36kr 文章，无假阳性。
+8. **URL 隐式日期模式是零成本的第一道防线** — 许多新闻/行业网站将日期直接编码在 URL 中。在运行任何聚焦搜索前，先用正则 `/(20[12]\d)(0[1-9]|1[0-2])\d{2}` 扫描 URL 路径，能零成本修复 30-50% 的"无日期"条目。2026-06-29 实战：URL 日期正则修复了 38 条 / 59 条无日期数据。
