@@ -201,7 +201,8 @@ sqlite3 /root/.hermes/state.db "SELECT model, COUNT(*) as cnt, SUM(input_tokens)
 
 - **缓存命中率的判断**：当 `cache_read_tokens > input_tokens` 时，可合理假设全部输入均为缓存命中价，因为缓存上下文大于当前输入。这是 cron 任务和重复会话中的常见情况。
 - **保守估计**：若想给出中位估算，按 50% 缓存命中率计算（`input * 0.5` 按命中价 + `input * 0.5` 按未命中价 + output 按输出价）。
-- **费用单位**：DeepSeek 官方定价为 USD，直接以 USD 展示。不乘以任何修正系数或汇率。
+- **费用单位**：DeepSeek 官方定价页面（https://api-docs.deepseek.com/quick_start/pricing）仅发布 USD 价格。直接以 USD 展示，不乘以任何修正系数或汇率。
+- **动态核验定价**：可使用 `web_extract(urls=["https://api-docs.deepseek.com/quick_start/pricing"])` 从官方页面实时获取最新定价，避免依赖过期缓存。
 - **报告注明**：末尾加注「TokScale 估算，实际以 DeepSeek 官网账单为准」。
 
 **按月累计估算示例：**
@@ -301,7 +302,7 @@ cat /root/.claude/settings.json
 - ❌ 不拉公式"预测"官网账单（用户明确反对这一点）
 - ✅ TokScale → 看趋势（今天比昨天多了少了）
 - ✅ 提供商官网 → 看实付（精确金额）
-- 报告末尾加注：`（TokScale 估算，实际以官网账单为准）`
+- 报告末尾加注：`（TokScale/DB 估算，实际以官网账单为准）`
 
 ### 3.1 核心矛盾：缓存未命中最烧钱
 
@@ -378,7 +379,7 @@ TokScale 的 Token 统计与提供商官网账单之间存在偏差是常见现�
 **正确做法：**
 - TokScale → 出多少写多少，**不要乘任何修正系数**
 - 报告末尾统一加注：`（TokScale 估算，实际以 DeepSeek 官网账单为准）`
-- 费用优先以 **CNY（人民币）** 展示，价格数字来自 TokScale 的 USD 输出原样呈现，不经过汇率/系数换算
+- 费用以 **USD** 展示（DeepSeek 官方定价页面仅发布 USD，不做汇率换算）
 - 用户看实付自己去看官网账单，我们不替他推算
 
 ### 6.1 已知偏差：DeepSeek 账单门户
@@ -532,7 +533,7 @@ cat /tmp/tokscale_stderr.txt  # 应为空
    • 会话数：XX 次
    • 消息数：XX 条
    • Token 总量：XX (输入 XX + 输出 XX + 缓存 XX)
-   • 费用：¥X.XX（TokScale 估算，实际以 DeepSeek 官网账单为准）
+   • 费用：$X.XX（TokScale/DB 估算，实际以 DeepSeek 官网账单为准）
 
    ━━━━ 压缩节约 ━━━━
    • 累计压缩率：XX%（已省 XX tokens）
@@ -540,14 +541,15 @@ cat /tmp/tokscale_stderr.txt  # 应为空
 
    ━━━━ 本月累计 ━━━━
    • Token 总量：XX
-   • 费用：¥X.XX
+   • 费用：$X.XX
 
 7. 重要注意事项：
-   - 费用优先以 USD 展示（DeepSeek 定价为 USD），不乘汇率转 CNY
-   - 报告末尾加注「TokScale 估算，实际以 DeepSeek 官网账单为准」
-   - 不要乘任何修正系数（×1.36、×汇率等）
-   - 如果 TokScale / DB / RTK 都返回错误，如实报告不编造
-   - TokScale 超时时明确说明「TokScale 超时未响应，降级使用 Hermes DB」
+   > - 费用以 USD 展示（DeepSeek 官方定价为 USD，不做汇率换算）
+   > - 报告末尾加注「TokScale/DB 估算，实际以 DeepSeek 官网账单为准」
+   > - 不要乘任何修正系数（×1.36、×汇率等）
+   > - 如果 TokScale / DB / RTK 都返回错误，如实报告不编造
+   > - TokScale 超时时明确说明「TokScale 超时未响应，降级使用 Hermes DB」
+   > - 如需动态核验定价，用 `web_extract(urls=["https://api-docs.deepseek.com/quick_start/pricing"])` 获取官方最新定价
 ```
 
 **旧版模板（仍然可用但不再推荐 — 依赖 skill 加载）：**
@@ -562,14 +564,14 @@ cat /tmp/tokscale_stderr.txt  # 应为空
 ━━━━ 用量统计 ━━━━
 • 消息数：80 条
 • Token 总量：22.7M (输入 789K + 输出 87K + 缓存 21.8M)
-• 费用：¥1.43（TokScale 估算，实际以官网账单为准）
+• 费用：$0.02（TokScale 估算，实际以官网账单为准）
 
 ━━━━ 压缩节约 ━━━━
 • 累计压缩：80.9% (已省 181K tokens)
 • 昨日命令数：6 条
 
 ━━━━ 综合 ━━━━
-• 本月累计：$4.99
+• 本月累计：$1.52
 • 缓存命中率：约 96%
 ```
 

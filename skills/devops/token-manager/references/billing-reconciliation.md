@@ -191,11 +191,11 @@ tokscale graph --client hermes --today --json | python3 -c "import json,sys; d=j
 
 ---
 
-## 附：CNY 报告规范
+## 附：USD 报告规范
 
-- 所有费用报告优先以 **人民币（CNY）** 展示
-- 直接呈现 TokScale 原始数字，**不做汇率/系数换算**，不试图匹配提供商账单
-- 格式：`¥XX.XX（TokScale 估算，实际以官网账单为准）`
+- 所有费用报告以 **美元（USD）** 展示（DeepSeek 官方定价页面仅发布 USD）
+- 直接呈现原始数字，**不做汇率/系数换算**，不试图匹配提供商账单
+- 格式：`$X.XX（DB 估算，实际以 DeepSeek 官网账单为准）`
 
 ---
 

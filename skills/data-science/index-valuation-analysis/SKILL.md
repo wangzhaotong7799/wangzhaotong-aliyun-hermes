@@ -28,7 +28,8 @@ metadata:
 1. **指数估值** — 按 SKILL.md 完整流程采集蛋卷基金估值中心数据（必须用 browser 工具取完整 DOM）
 2. **韭圈儿恐贪指数（必须）** — 运行命令采集：
    python3 /root/.hermes/scripts/jiucai_fear_index.py --simple
-   分类：0-24=极恐 25-44=恐惧 45-55=中性 56-74=贪婪 75-100=极贪
+   注意：直接使用脚本返回的 status_str 作为分类标签（脚本已含从API解码的正确分类），不要自行重分类
+   脚本输出示例：\"36 中立\"
 
 数据日期为今天。"
       skills: [index-valuation-analysis]
@@ -318,15 +319,12 @@ python3 /root/.hermes/scripts/jiucai_fear_index.py --simple
 
 ### 分类标签
 
-| 数值区间 | 标签 |
-|:--:|:--|
-| 0-24 | 🟣 极恐 |
-| 25-44 | 🟠 恐惧 |
-| 45-55 | ⚪ 中性 |
-| 56-74 | 🟡 贪婪 |
-| 75-100 | 🟢 极贪 |
+**重要：** 脚本 `jiucai_fear_index.py --simple` 直接返回 API 的原始分类（如 "36 中立"），API 自身已带有正确分类标签。
+直接使用脚本输出即可，**不要自行重分类**。脚本输出的 status_str 即为正确分类。
 
-**注意事项：** 韭圈儿恐贪指数与 CNN Fear & Greed Index 的算法不同（韭圈儿基于A股6个情绪因子，CNN基于美股7个因子），数值不能直接对比。用户明确以韭圈儿为准，但目前技术通路阻塞，待用户提供可行取数方式后切换。
+参考：实际API分类示例 — 29=恐惧, 32=中立, 36=中立, 49=中立, 80=贪婪。
+
+**注意事项：** 韭圈儿恐贪指数与 CNN Fear & Greed Index 的算法不同（韭圈儿基于A股5个情绪因子，CNN基于美股7个因子），数值不能直接对比。
 
 ---
 
@@ -366,7 +364,7 @@ python3 /root/.hermes/scripts/jiucai_fear_index.py
 3. 解密参数：Key=`K_B+"ll1"`, IV=`K_A+"ll1"`, AES-256-CBC/PKCS7
    - `K_A = "bvroqevdjqibsdkq"`
    - `K_B = "eveqocftukbotqjcequcnkrqlw1oi"`
-4. 恐贪指数分类：0-24 极恐 | 25-44 恐惧 | 45-55 中性 | 56-74 贪婪 | 75-100 极贪
+4. 脚本直接返回 API 的原始分类（如 "36 中立"），直接使用，不要自行重分类
 
 ### 追踪指数列表
 

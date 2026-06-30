@@ -4,7 +4,7 @@ Hermes Agent 模型选择器（⚙ Model Picker）对 custom_providers 只提取
 §
 Token管家技能: token-manager(devops/)。TokScale+RTK已就绪，全局Hook已装。含每日08:00 cron日报任务+配套脚本+多智能体自助安装指引。SKILL.md已推送GitHub。
 §
-数据质量铁律加固(2026-05-04)：三份周报Cron只采2026年数据、标注data_year、严禁改年份。猎财SOP新增年份验证闸门。韭圈儿恐贪指数(2026-06-26接入)：加密AES-256-CBC，解密Key=K_B+ll1, IV=K_A+ll1。脚本~/.hermes/scripts/jiucai_fear_index.py。蛋卷表web_extract截断陷阱已修——Cron改用browser DOM+js取数。
+韭圈儿恐贪指数：0~100，越低越恐惧。由5个维度等权计算（指数波动、总成交量、股价强度、升贴水率、避险天堂），杠杆水平不计入指数。取过去一年分位值归一化。API自身返回正确分类，直接用脚本 jiucai_fear_index.py --simple 的 status_str 即可，禁止自行编造分类阈值。API示例：29=恐惧, 32=中立, 36=中立, 49=中立, 80=贪婪。脚本在~/.hermes/scripts/jiucai_fear_index.py，解密Key=K_B+ll1, IV=K_A+ll1。
 §
 铁律第7条「宝塔面板不动原则」：任何时候严禁修改宝塔面板的任何代码文件（/www/server/panel/ 下的源码、前端、配置文件、数据库、模板）。仅限于通过 Web 界面管理。严禁直接编辑面板代码或操作面板 SQLite 数据库。配置修改必须通过宝塔 Web 界面或官方 API。
 §
