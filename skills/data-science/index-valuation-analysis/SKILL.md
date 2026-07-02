@@ -440,5 +440,5 @@ deliver：飞书私聊
 
 - `references/csi300-pe-history.md` — 沪深300历史PE数据及百分位统计分析
 - `references/data-sources.md` — 各数据源特点与可信度说明
-- `references/chuangyeban-kc50-analysis.md` — 创业板指 & 科创50 PE百分位分析（2026-06-18）
+- `references/fund-portfolio-rebalancing.md` — 基金持仓再平衡方法论：解析Excel、计算有效股债比、检查市场环境、识别问题、生成建议方案
 - `references/jiucai-fear-greed-api.md` — 韭圈儿恐贪指数API反向工程记录（含SPA API通用方法论）

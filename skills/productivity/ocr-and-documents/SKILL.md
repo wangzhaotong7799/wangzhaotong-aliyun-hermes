@@ -170,3 +170,34 @@ No extra dependencies needed — pymupdf covers split, merge, search, and text e
 - marker-pdf downloads ~2.5GB of models to `~/.cache/huggingface/` on first use
 - For Word docs: `pip install python-docx` (better than OCR — parses actual structure)
 - For PowerPoint: see the `powerpoint` skill (uses python-pptx)
+
+---
+
+## Screenshot OCR Fallback (Vision API Unavailable)
+
+When the vision API fails (401 auth, provider error, rate limit) and you need text from a user's screenshot PNG/JPEG, use `tesseract` with Chinese + English as a fallback:
+
+```bash
+tesseract /path/to/screenshot.png stdout -l chi_sim+eng 2>/dev/null
+```
+
+**Python with Pillow + pytesseract:**
+```python
+from PIL import Image
+import pytesseract
+img = Image.open('/path/to/screenshot.png')
+text = pytesseract.image_to_string(img, lang='chi_sim+eng')
+```
+
+**Prerequisites (one-time install):**
+```bash
+apt install tesseract-ocr tesseract-ocr-chi-sim  # Linux
+pip install Pillow pytesseract
+```
+
+**Caveats:**
+- OCR accuracy drops sharply on noisy, low-res, or color-inverted images
+- Best results on clean white-background screenshots with clear Chinese text (fund names, codes, table data)
+- Tesseract does NOT handle multi-column layouts well — expect jumbled reading order on complex tables
+- For structured table screenshots, use `--psm 6` (assume uniform block) or `--psm 4` (assume single column of text): `tesseract input.png stdout -l chi_sim+eng --psm 6`
+- Still better than guessing: OCR errors are easy for a human to spot and correct
