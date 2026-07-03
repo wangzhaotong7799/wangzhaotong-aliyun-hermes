@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-03T13:57:02.026627",
+  "updated_at": "2026-07-03T22:56:07.827671",
   "platforms": {
     "telegram": [],
     "discord": [],
@@ -15,12 +15,6 @@
     "dingtalk": [],
     "msgraph_webhook": [],
     "feishu": [
-      {
-        "id": "oc_10d032f2e5b7b86d660945627d981888",
-        "name": "oc_10d032f2e5b7b86d660945627d981888",
-        "type": "dm",
-        "thread_id": null
-      },
       {
         "id": "oc_9f433716bb8afe94566f177089e4f8f7",
         "name": "用户657799",
@@ -50,6 +44,12 @@
         "name": "oc_10d032f2e5b7b86d660945627d981888 / topic om_x100b6c6bac8784a4c4a0fd51b61d211",
         "type": "dm",
         "thread_id": "om_x100b6c6bac8784a4c4a0fd51b61d211"
+      },
+      {
+        "id": "oc_10d032f2e5b7b86d660945627d981888",
+        "name": "oc_10d032f2e5b7b86d660945627d981888",
+        "type": "dm",
+        "thread_id": null
       }
     ],
     "wecom": [],

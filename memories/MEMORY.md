@@ -55,3 +55,9 @@ Token管家v1.2.0: v4-flash定价手动缓存(cache/pricing-litellm.json)。cron
 主人会自己打开浏览器F12 Network面板找API请求并截图配合逆向工程，技术动手能力强。偏好直接给信息而非一步步解释。
 §
 用户基金持仓(2026-07-02)：总仓39.4万, 股债≈65/35。用户选景顺长城中证A500(159353/022444)替换沪深300为宽基核心。用户有独立基金选择参考表(ETF代码+联接代码)。OCR fallback用tesseract+chi_sim+eng读截图。已存至index-valuation-analysis/references/fund-portfolio-rebalancing.md。
+§
+v0.18.0 (The Judgement Release) 已升级完成 (2026-07-03)。新增: MoA一等公民 + Completion Contracts(完成证明) + /learn即时创建技能 + /journey记忆时间线 + 后台子智能体fan-out + 关闭~700个P0/P1 issue。升级成功：hermes update 脚本实际已完成(v0.17.0→v0.18.0)，Web UI重建+Node/Python依赖全部更新完毕。
+§
+Daisy Financial Research + official stocks skill 已安装。TUSHARE_TOKEN 已配入.env。Hermes venv已装tushare/akshare/yfinance/pandas/stockstats。使用：日常快速查价用 stocks skill，深度研究用 Daisy（需先 /skill daisy-financial-research 加载技能）。
+§
+Fund pool database (~/.hermes/fund_portfolio.db) has bank-themed fund: 天弘中证银行ETF (场内515290/场外001594), currently not held. Daisy Financial Research + official stocks skill installed. Daisy's SKILL.md patched to note this installation uses Hermes native tools (web_search/web_extract) instead of Brave MCP/Bailian MCP — see daisy references/hermes-native-tool-routing.md.
