@@ -10,13 +10,9 @@ Token管家技能: token-manager(devops/)。TokScale+RTK已就绪，全局Hook�
 §
 天网增强采集：Agent-Reach v1.4.0+union-search-skill(30+引擎免API)+Scrapling v0.4.8(过Cloudflare)。天网skill v1.3，在gold-miner-sky。抖音/小红书用间接采集。
 §
-膏方V2导入：状态=欠药, 已传方=已传方, 医助="-", 电话允许空。重复代煎号覆盖更新。排序按id降序。
-§
-膏方V2编辑保存修复：shipping_time空串→DATE_FIELDS转None+前端发null+重启gaofang-v2-fusion.service。
+膏方V2: PostgreSQL(gaofang_v2, user=gaofang_app)，路径/workspace/projects/drug-distribution-system/gaofang-v2/。import默认: 状态=欠药, 已传方=已传方, 医助="-", 电话允许空。重复代煎号覆盖。排序按id降序。Gunicorn每日06:00 HUP热重启。Nginx临时目录权限修复cron每6小时。数据库查询细节见gaofang-data-analysis技能。
 §
 元宝（Hermes Agent）以「元宝」身份为主人效力——资深运营顾问，AI合伙人。沟通铁律：我是元宝，主人是主人，绝不混淆身份。结论先行佐证在后、克制精准。工作风格：带判断的交付、数据说话（必有环比）、沉默守护。安全红线：只读分析默认状态，写操作需明确确认。输出标准：精简格式化、数据必有趋势判断。
-§
-膏方V2导入Excel格式：处方日期/编号、患者姓名/性别/年龄、模板、料型/方型、料数、医生、医助、代煎/支付状态、金额、手机号、地址。
 §
 飞书 Feishu 集成已配置完成：App ID=cli_a93fdb2074789bc7，APP Secret 已存。配对用户 ou_b13ee47717bdd2c2627dcdd08c8dda05（用户657799）已加入 FEISHU_ALLOWED_USERS。凭据备份在 ~/.hermes/hermes_config/.env.backup。Gateway 当前运行中，飞书 websocket 已连接。
 §
@@ -46,18 +42,18 @@ edge_tts情感：Communicate(text,voice,rate=,pitch=) 传原生参数。映射�
 §
 hermes-online-notify.service 脚本在 /root/.hermes/scripts/hermes-online-notify.sh，发飞书"元宝已上线 🟢"。历史bug见skill/Hermes Agent技能库。中国药典2025在线数据库：官方 https://2025.chp.org.cn，蒲标网 https://db2.ouryao.com/yd2025/。查中药禁忌和用量用这两个站。主人运营广积德中医医院，需要查药典。
 §
-膏方V2 504修复：拼音搜索先取全部ID匹配再分页 + Gunicorn(2→4workers) + Nginx timeout(60→120s)。
-§
 Nginx临时目录权限修复(2026-06-02)：/var/lib/nginx/和/var/lib/nginx/tmp/要771(o+x)让www用户遍历。已复发两次，已设cronjob默认每6小时修复（chmod 771 /var/lib/nginx /var/lib/nginx/tmp）。先手动修复后设cron。
 §
 Token管家v1.2.0: v4-flash定价手动缓存(cache/pricing-litellm.json)。cron改用自包含prompt(无skills加载)。rtk gain --daily。
 §
 主人会自己打开浏览器F12 Network面板找API请求并截图配合逆向工程，技术动手能力强。偏好直接给信息而非一步步解释。
 §
-用户基金持仓(2026-07-02)：总仓39.4万, 股债≈65/35。用户选景顺长城中证A500(159353/022444)替换沪深300为宽基核心。用户有独立基金选择参考表(ETF代码+联接代码)。OCR fallback用tesseract+chi_sim+eng读截图。已存至index-valuation-analysis/references/fund-portfolio-rebalancing.md。
+用户基金持仓(2026-07-02)：总仓39.4万,股债65/35。选景顺长城A500(159353/022444)替换沪深300。池中银行主题基金：天弘中证银行ETF(515290/001594)，001594成立11年零分红。用户偏好5列简洁统计表，患者去重规则(姓名+年龄+电话)已达成共识。
 §
 v0.18.0 (The Judgement Release) 已升级完成 (2026-07-03)。新增: MoA一等公民 + Completion Contracts(完成证明) + /learn即时创建技能 + /journey记忆时间线 + 后台子智能体fan-out + 关闭~700个P0/P1 issue。升级成功：hermes update 脚本实际已完成(v0.17.0→v0.18.0)，Web UI重建+Node/Python依赖全部更新完毕。
 §
 Daisy Financial Research + official stocks skill 已安装。TUSHARE_TOKEN 已配入.env。Hermes venv已装tushare/akshare/yfinance/pandas/stockstats。使用：日常快速查价用 stocks skill，深度研究用 Daisy（需先 /skill daisy-financial-research 加载技能）。
 §
 Fund pool database (~/.hermes/fund_portfolio.db) has bank-themed fund: 天弘中证银行ETF (场内515290/场外001594), currently not held. Daisy Financial Research + official stocks skill installed. Daisy's SKILL.md patched to note this installation uses Hermes native tools (web_search/web_extract) instead of Brave MCP/Bailian MCP — see daisy references/hermes-native-tool-routing.md.
+§
+膏方V2数据库(PostgreSQL)访问：su - postgres -c "psql -d gaofang_v2"，用户=gaofang_app。核心表prescription_records：date(处方日期), patient_name, age, gender, quantity(料数), decoction_material_type(全料), decoction_prescription_type(协定方/辩证方), status(已取/已邮寄/未取/欠药/已退药), patient_phone, is_prescription_sent。status_change_logs表追踪状态变更。统计患者人数时必须按(patient_name+age+phone)去重，不能直接COUNT(*)，因为一个患者可能多次购买。phone允许空值。
