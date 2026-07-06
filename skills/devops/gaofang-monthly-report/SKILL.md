@@ -8,7 +8,9 @@ tags: [gaofang, monthly-report, statistics, database]
 
 # 膏方月度统计报告
 
-每月1日自动运行，统计上一完整月份的膏方导入和发放数据。
+每月1日08:00 Cron自动运行，统计上一完整月份的膏方导入和发放数据。交付到飞书。
+
+> **核心查询逻辑和字段说明见 `gaofang-database` 技能** — 本技能只包含 cron 专用配置和 prompt。
 
 ## 数据口径
 

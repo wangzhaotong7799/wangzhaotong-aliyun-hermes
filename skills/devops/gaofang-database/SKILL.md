@@ -106,3 +106,64 @@ When Excel data is imported, empty/missing fields get these defaults:
 - Deliver ONLY the requested columns — no extra commentary, no interpretations, no "趋势分析" unless asked
 - If the user says "只要 月份 | A | B | C | D", output exactly those columns
 - For data discrepancies, state the facts concisely and ask the user what they expect — don't argue
+
+## Common query patterns
+
+### Monthly report (by import time)
+
+This is the user's standard monthly view — used by the `gaofang-monthly-report` cron job (每月1日08:00):
+
+```
+月份 | 上传患者人数 | 上传总料数 | 发放患者数 | 发放料数
+```
+
+See `gaofang-monthly-report` skill for the exact SQL template and cron configuration.
+
+### Year-over-year comparison
+
+When the user asks to compare two periods (e.g., 2025 H1 vs 2026 H1):
+
+1. Query both periods using the SAME time dimension (either both by `date` or both by `created_at`)
+2. For YoY comparison, use `date` (处方日期) as the dimension — both years have prescription dates, but `created_at` may not span both years
+3. Present side-by-side: month | Year1患者 | Year1料数 | Year2患者 | Year2料数
+4. Add totals row with cross-period patient dedup (NOT sum of monthly patients)
+
+## Pitfalls
+
+### Cross-month total dedup
+
+**NEVER sum the monthly unique patient counts to get a half-year/year total.** The same patient may appear in multiple months. Always use a single query with the full date range:
+
+```sql
+-- ❌ Wrong: sum monthly counts
+56 + 191 + 147 + 254 + 191 + 174 = 1013
+
+-- ✅ Right: single dedup over the full range
+COUNT(DISTINCT patient_name || '|' || age::text || '|' || COALESCE(patient_phone, ''))
+FROM prescription_records
+WHERE date >= '2025-01-01' AND date < '2025-07-01';
+-- → 854
+```
+
+### Excel cross-reference for data verification
+
+When the user sends an Excel file (e.g., `代煎处方 2026-06.xlsx`) to verify database numbers:
+
+1. Extract the file with Python/openpyxl
+2. Count total rows and sum `料数` (column index 9 in the export format)
+3. Note: the user's "6月" Excel may contain prescriptions with dates in May (处方日期是5月但6月才导入)
+4. Cross-reference: DB records where `created_at` is in the target month but `prescription_id` is NOT in the Excel → these are the extra records
+5. Present the discrepancy clearly: "Excel有X条/Y料，DB多出N条/M料"
+6. The `date` field (处方日期) may be in a different month than `created_at` — this is expected for batch imports
+
+### Date field confusion
+
+When the user asks for "上传" data:
+- **上传时间 = `created_at`** (import/created timestamp) — this is the user's preferred time dimension for monthly stats
+- **处方日期 = `date`** — when the prescription was written, NOT when it was imported
+- An Excel file imported in June may contain prescriptions dated in May
+- Always clarify which time dimension the user wants, or default to `created_at` for monthly reports
+
+## Reference files
+
+- `references/excel-cross-verify.md` — Step-by-step workflow for verifying database numbers against a user-provided import Excel file. Use when the user says "你的数据不对" and sends the original Excel.
