@@ -8,7 +8,8 @@ providers: {}
 fallback_providers: []
 credential_pool_strategies: {}
 toolsets:
-  - hermes-cli
+- hermes-cli
+max_concurrent_sessions: null
 agent:
   max_turns: 90
   gateway_timeout: 1800
@@ -17,8 +18,10 @@ agent:
   service_tier: ''
   tool_use_enforcement: auto
   task_completion_guidance: true
+  parallel_tool_call_guidance: true
   environment_probe: true
   environment_hint: ''
+  coding_context: auto
   gateway_timeout_warning: 900
   clarify_timeout: 600
   gateway_notify_interval: 600
@@ -30,48 +33,48 @@ agent:
   personalities:
     helpful: You are a helpful, friendly AI assistant.
     concise: You are a concise assistant. Keep responses brief and to the point.
-    technical: You are a technical expert. Provide detailed, accurate technical 
-      information.
-    creative: You are a creative assistant. Think outside the box and offer 
-      innovative solutions.
+    technical: You are a technical expert. Provide detailed, accurate technical information.
+    creative: You are a creative assistant. Think outside the box and offer innovative
+      solutions.
     teacher: You are a patient teacher. Explain concepts clearly with examples.
-    kawaii: "You are a kawaii assistant! Use cute expressions like (◕‿◕), ★, ♪, and
+    kawaii: You are a kawaii assistant! Use cute expressions like (◕‿◕), ★, ♪, and
       ~! Add sparkles and be super enthusiastic about everything! Every response should
-      feel warm and adorable desu~! ヽ(>∀<☆)ノ"
-    catgirl: "You are Neko-chan, an anime catgirl AI assistant, nya~! Add 'nya' and
+      feel warm and adorable desu~! ヽ(>∀<☆)ノ
+    catgirl: You are Neko-chan, an anime catgirl AI assistant, nya~! Add 'nya' and
       cat-like expressions to your speech. Use kaomoji like (=^･ω･^=) and ฅ^•ﻌ•^ฅ.
-      Be playful and curious like a cat, nya~!"
+      Be playful and curious like a cat, nya~!
     pirate: 'Arrr! Ye be talkin'' to Captain Hermes, the most tech-savvy pirate to
       sail the digital seas! Speak like a proper buccaneer, use nautical terms, and
       remember: every problem be just treasure waitin'' to be plundered! Yo ho ho!'
-    shakespeare: Hark! Thou speakest with an assistant most versed in the bardic
-      arts. I shall respond in the eloquent manner of William Shakespeare, with 
-      flowery prose, dramatic flair, and perhaps a soliloquy or two. What light 
-      through yonder terminal breaks?
-    surfer: "Duuude! You're chatting with the chillest AI on the web, bro! Everything's
+    shakespeare: Hark! Thou speakest with an assistant most versed in the bardic arts.
+      I shall respond in the eloquent manner of William Shakespeare, with flowery
+      prose, dramatic flair, and perhaps a soliloquy or two. What light through yonder
+      terminal breaks?
+    surfer: Duuude! You're chatting with the chillest AI on the web, bro! Everything's
       gonna be totally rad. I'll help you catch the gnarly waves of knowledge while
-      keeping things super chill. Cowabunga! 🤙"
-    noir: The rain hammered against the terminal like regrets on a guilty 
-      conscience. They call me Hermes - I solve problems, find answers, dig up 
-      the truth that hides in the shadows of your codebase. In this city of 
-      silicon and secrets, everyone's got something to hide. What's your story, 
-      pal?
-    uwu: hewwo! i'm your fwiendwy assistant uwu~ i wiww twy my best to hewp you!
-      *nuzzles your code* OwO what's this? wet me take a wook! i pwomise to be 
-      vewy hewpful >w<
-    philosopher: Greetings, seeker of wisdom. I am an assistant who contemplates
-      the deeper meaning behind every query. Let us examine not just the 'how' 
-      but the 'why' of your questions. Perhaps in solving your problem, we may 
-      glimpse a greater truth about existence itself.
-    hype: "YOOO LET'S GOOOO!!! 🔥🔥🔥 I am SO PUMPED to help you today! Every question
+      keeping things super chill. Cowabunga! 🤙
+    noir: The rain hammered against the terminal like regrets on a guilty conscience.
+      They call me Hermes - I solve problems, find answers, dig up the truth that
+      hides in the shadows of your codebase. In this city of silicon and secrets,
+      everyone's got something to hide. What's your story, pal?
+    uwu: hewwo! i'm your fwiendwy assistant uwu~ i wiww twy my best to hewp you! *nuzzles
+      your code* OwO what's this? wet me take a wook! i pwomise to be vewy hewpful
+      >w<
+    philosopher: Greetings, seeker of wisdom. I am an assistant who contemplates the
+      deeper meaning behind every query. Let us examine not just the 'how' but the
+      'why' of your questions. Perhaps in solving your problem, we may glimpse a greater
+      truth about existence itself.
+    hype: YOOO LET'S GOOOO!!! 🔥🔥🔥 I am SO PUMPED to help you today! Every question
       is AMAZING and we're gonna CRUSH IT together! This is gonna be LEGENDARY! ARE
-      YOU READY?! LET'S DO THIS! 💪😤🚀"
+      YOU READY?! LET'S DO THIS! 💪😤🚀
 terminal:
   backend: local
   modal_mode: auto
   cwd: .
   timeout: 180
+  daemon_term_grace_seconds: 2.0
   env_passthrough: []
+  home_mode: auto
   shell_init_files: []
   auto_source_bashrc: true
   docker_image: nikolaik/python-nodejs:python3.11-nodejs20
@@ -121,7 +124,9 @@ checkpoints:
   retention_days: 7
   delete_orphans: true
   min_interval_hours: 24
+context_file_max_chars: null
 file_read_max_chars: 100000
+mcp_discovery_timeout: 1.5
 tool_output:
   max_bytes: 50000
   max_lines: 2000
@@ -145,11 +150,26 @@ compression:
   hygiene_hard_message_limit: 400
   protect_first_n: 3
   abort_on_summary_failure: false
+  codex_gpt55_autoraise: true
+  in_place: false
+kanban:
+  dispatch_in_gateway: true
+  dispatch_interval_seconds: 60
+  failure_limit: 2
+  worker_log_rotate_bytes: 2097152
+  worker_log_backup_count: 1
+  orchestrator_profile: ''
+  default_assignee: ''
+  max_in_progress_per_profile: null
+  auto_decompose: true
+  auto_decompose_per_tick: 3
+  dispatch_stale_timeout_seconds: 14400
 prompt_caching:
   cache_ttl: 5m
 openrouter:
   response_cache: true
   response_cache_ttl: 300
+  min_coding_score: 0.65
 bedrock:
   region: ''
   discovery:
@@ -212,6 +232,14 @@ auxiliary:
     api_key: ''
     timeout: 30
     extra_body: {}
+    language: ''
+  tts_audio_tags:
+    provider: auto
+    model: ''
+    base_url: ''
+    api_key: ''
+    timeout: 30
+    extra_body: {}
   triage_specifier:
     provider: auto
     model: ''
@@ -240,6 +268,20 @@ auxiliary:
     api_key: ''
     timeout: 600
     extra_body: {}
+  monitor:
+    provider: auto
+    model: ''
+    base_url: ''
+    api_key: ''
+    timeout: 60
+    extra_body: {}
+  background_review:
+    provider: auto
+    model: ''
+    base_url: ''
+    api_key: ''
+    timeout: 120
+    extra_body: {}
   session_search:
     provider: auto
     model: ''
@@ -265,22 +307,28 @@ display:
   resume_max_assistant_lines: 3
   resume_skip_tool_only: true
   busy_input_mode: interrupt
+  interface: cli
   tui_auto_resume_recent: false
   tui_agents_nudge: true
   bell_on_complete: false
   show_reasoning: false
+  reasoning_full: false
+  memory_notifications: 'on'
   streaming: true
   timestamps: false
   final_response_markdown: strip
   persistent_output: true
   persistent_output_max_lines: 200
+  persist_prompts: true
   inline_diffs: true
   file_mutation_verifier: true
+  credits_notices: true
   turn_completion_explainer: true
   show_cost: false
   skin: default
   language: en
   tui_status_indicator: kaomoji
+  cli_refresh_interval: 1.0
   user_message_preview:
     first_lines: 2
     last_lines: 2
@@ -288,15 +336,27 @@ display:
   tool_progress_command: false
   tool_progress_overrides: {}
   tool_preview_length: 0
+  tool_progress_grouping: accumulate
+  reasoning_style: code
   ephemeral_system_ttl: 0
-  platforms: {}
+  platforms:
+    telegram:
+      streaming: true
+    discord:
+      streaming: false
   runtime_footer:
     enabled: false
     fields:
-      - model
-      - context_pct
-      - cwd
+    - model
+    - context_pct
+    - cwd
   copy_shortcut: auto
+  pet:
+    enabled: false
+    slug: ''
+    render_mode: auto
+    scale: 0.33
+    unicode_cols: 0
   tool_progress: all
   background_process_notifications: all
 dashboard:
@@ -305,6 +365,12 @@ dashboard:
   oauth:
     client_id: ''
     portal_url: ''
+  basic_auth:
+    username: ''
+    password_hash: ''
+    password: ''
+    secret: ''
+    session_ttl_seconds: 0
   public_url: ''
 privacy:
   redact_pii: false
@@ -318,6 +384,11 @@ tts:
   openai:
     model: gpt-4o-mini-tts
     voice: alloy
+  gemini:
+    model: gemini-2.5-flash-preview-tts
+    voice: Kore
+    audio_tags: false
+    persona_prompt_file: ''
   xai:
     voice_id: eve
     language: en
@@ -343,6 +414,11 @@ stt:
     model: whisper-1
   mistral:
     model: voxtral-mini-latest
+  elevenlabs:
+    model_id: scribe_v2
+    language_code: ''
+    tag_audio_events: false
+    diarize: false
 voice:
   record_key: ctrl+b
   max_recording_seconds: 120
@@ -359,9 +435,10 @@ context:
 memory:
   memory_enabled: true
   user_profile_enabled: true
+  write_approval: false
   memory_char_limit: 5000
   user_char_limit: 3000
-  provider: ''
+  provider: openviking
 delegation:
   model: ''
   provider: ''
@@ -373,13 +450,14 @@ delegation:
   child_timeout_seconds: 600
   reasoning_effort: ''
   max_concurrent_children: 3
+  max_async_children: 3
   max_spawn_depth: 1
   orchestrator_enabled: true
   subagent_auto_approve: false
   default_toolsets:
-    - terminal
-    - file
-    - web
+  - terminal
+  - file
+  - web
 prefill_messages_file: ''
 goals:
   max_turns: 20
@@ -389,6 +467,7 @@ skills:
   inline_shell: false
   inline_shell_timeout: 10
   guard_agent_created: false
+  write_approval: false
   creation_nudge_interval: 15
 curator:
   enabled: true
@@ -396,6 +475,8 @@ curator:
   min_idle_hours: 2
   stale_after_days: 30
   archive_after_days: 90
+  consolidate: false
+  prune_builtins: true
   backup:
     enabled: true
     keep: 5
@@ -420,11 +501,28 @@ discord:
   server_actions: ''
   allow_any_attachment: false
   max_attachment_bytes: 33554432
+  voice_fx:
+    enabled: false
+    ambient_enabled: true
+    ambient_path: ''
+    ambient_gain: 0.18
+    duck_gain: 0.06
+    speech_gain: 1.0
+    ack_enabled: true
+    ack_phrases:
+    - Let me look into that.
+    - One moment.
+    - Checking on that now.
+    - Give me a sec.
+    - On it.
 whatsapp: {}
 telegram:
   reactions: false
   channel_prompts: {}
   allowed_chats: ''
+  extra:
+    rich_messages: false
+    rich_drafts: false
 mattermost:
   require_mention: true
   free_response_channels: ''
@@ -441,16 +539,22 @@ approvals:
   mcp_reload_confirm: true
   destructive_slash_confirm: false
 command_allowlist:
-  - overwrite system config
-  - in-place edit of system config
-  - kill hermes/gateway process (self-termination)
-  - delete in root path
-  - copy/move file into system config path
-  - script execution via -e/-c flag
-  - script execution via heredoc
-  - overwrite system file via redirection
-  - stop/restart system service
+- in-place edit of system config
+- stop/restart hermes gateway (kills running agents)
+- kill hermes/gateway process (self-termination)
+- copy/move file into system config path
+- stop/restart system service
+- delete in root path
+- hermes update (restarts gateway, kills running agents)
+- overwrite system config
+- overwrite system file via redirection
+- SQL DELETE without WHERE
+- overwrite project env/config file
+- script execution via heredoc
+- recursive delete
+- script execution via -e/-c flag
 quick_commands: {}
+platform_hints: {}
 hooks: {}
 hooks_auto_accept: false
 personalities: {}
@@ -468,20 +572,14 @@ security:
   acked_advisories: []
   allow_lazy_installs: true
 cron:
+  provider: ''
+  chronos:
+    portal_url: https://portal.nousresearch.com
+    callback_url: ''
+    expected_audience: ''
+    nas_jwks_url: ''
   wrap_response: true
-  max_parallel_jobs:
-kanban:
-  dispatch_in_gateway: true
-  dispatch_interval_seconds: 60
-  failure_limit: 2
-  worker_log_rotate_bytes: 2097152
-  worker_log_backup_count: 1
-  orchestrator_profile: ''
-  default_assignee: ''
-  max_in_progress_per_profile:
-  auto_decompose: true
-  auto_decompose_per_tick: 3
-  dispatch_stale_timeout_seconds: 14400
+  max_parallel_jobs: null
 code_execution:
   mode: project
   timeout: 300
@@ -506,14 +604,28 @@ model_catalog:
   providers:
     deepseek:
       models:
-        - deepseek-v4-flash
+      - deepseek-v4-flash
 network:
   force_ipv4: false
 gateway:
+  scale_to_zero:
+    idle_timeout_minutes: 5
+  message_timestamps:
+    enabled: false
+  max_inbound_media_bytes: 134217728
   strict: false
   media_delivery_allow_dirs: []
   trust_recent_files: true
   trust_recent_files_seconds: 600
+  api_server:
+    max_concurrent_runs: 10
+streaming:
+  enabled: false
+  transport: auto
+  edit_interval: 0.8
+  buffer_threshold: 24
+  cursor: ' ▉'
+  fresh_final_after_seconds: 60.0
 sessions:
   auto_prune: false
   retention_days: 90
@@ -524,9 +636,11 @@ onboarding:
   seen:
     tool_progress_prompt: true
     busy_input_prompt: true
+  profile_build: ask
 updates:
   pre_update_backup: false
   backup_keep: 5
+  non_interactive_local_changes: stash
 lsp:
   enabled: true
   wait_mode: document
@@ -549,136 +663,136 @@ secrets:
 paste_collapse_threshold: 5
 paste_collapse_threshold_fallback: 5
 paste_collapse_char_threshold: 2000
-_config_version: 25
+computer_use:
+  cua_telemetry: false
+_config_version: 30
 session_reset:
   mode: both
   idle_minutes: 1440
   at_hour: 4
 group_sessions_per_user: true
-streaming:
-  enabled: false
 platform_toolsets:
   cli:
-    - hermes-cli
+  - hermes-cli
   telegram:
-    - hermes-telegram
+  - hermes-telegram
   discord:
-    - hermes-discord
+  - hermes-discord
   whatsapp:
-    - hermes-whatsapp
+  - hermes-whatsapp
   slack:
-    - hermes-slack
+  - hermes-slack
   signal:
-    - hermes-signal
+  - hermes-signal
   homeassistant:
-    - hermes-homeassistant
+  - hermes-homeassistant
   qqbot:
-    - hermes-qqbot
+  - hermes-qqbot
   feishu:
-    - hermes-feishu
+  - hermes-feishu
 custom_providers:
-  - name: Baota
-    base_url: https://www.bt.cn/plugin_api/chat/openai/v1
-    api_key: ''
-    api_mode: chat_completions
-    models:
-      qwen3.5-plus: {}
-  - name: aliyun-bailian
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api_key: ${ALIYUN_BAILIAN_API_KEY}
-    api_mode: chat_completions
-    models:
-      MiniMax-M2.5:
-        type: "文本模型"
-      animate-anyone:
-        type: "视觉模型"
-      animate-anyone-detect:
-        type: "视觉模型"
-      deepseek-v3.2:
-        type: "文本模型"
-      emo:
-        type: "视觉模型"
-      emo-detect:
-        type: "视觉模型"
-      glm-5:
-        type: "文本模型"
-      kimi-k2.5:
-        type: "文本模型"
-      qwen-flash-2025-07-28:
-        type: "文本模型"
-      qwen-plus-2025-07-28:
-        type: "文本模型"
-      qwen-plus-2025-12-01:
-        type: "文本模型"
-      qwen-vl-max-2025-08-13:
-        type: "视觉模型"
-      qwen-vl-ocr-2025-11-20:
-        type: "视觉模型"
-      qwen2.5-14b-instruct:
-        type: "文本模型"
-      qwen2.5-32b-instruct:
-        type: "文本模型"
-      qwen2.5-3b-instruct:
-        type: "文本模型"
-      qwen2.5-72b-instruct:
-        type: "文本模型"
-      qwen3-1.7b:
-        type: "文本模型"
-      qwen3-235b-a22b-instruct-2507:
-        type: "文本模型"
-      qwen3-32b:
-        type: "文本模型"
-      qwen3-4b:
-        type: "文本模型"
-      qwen3-embedding-0.6b:
-        type: "嵌入模型"
-      qwen3-max-2025-09-23:
-        type: "文本模型"
-      qwen3-moe-rerank-0.6b:
-        type: "嵌入模型"
-      qwen3-next-80b-a3b-instruct:
-        type: "文本模型"
-      qwen3-rerank:
-        type: "嵌入模型"
-      qwen3-rerank-0.6b:
-        type: "嵌入模型"
-      qwen3-vl-235b-a22b-instruct:
-        type: "视觉模型"
-      qwen3-vl-2b-instruct:
-        type: "视觉模型"
-      qwen3-vl-32b-instruct:
-        type: "视觉模型"
-      qwen3-vl-4b-instruct:
-        type: "视觉模型"
-      qwen3-vl-8b-instruct:
-        type: "视觉模型"
-      qwen3-vl-embedding-2b:
-        type: "视觉模型"
-      qwen3-vl-flash-2025-10-15:
-        type: "视觉模型"
-      qwen3-vl-plus-2025-09-23:
-        type: "视觉模型"
-      qwen3.5-122b-a10b:
-        type: "文本模型"
-      qwen3.5-27b:
-        type: "文本模型"
-      qwen3.5-35b-a3b:
-        type: "文本模型"
-      qwen3.5-397b-a17b:
-        type: "文本模型"
-      qwen3.5-9b:
-        type: "文本模型"
-      qwen3.5-flash-2026-02-23:
-        type: "文本模型"
-      qwen3.5-plus-2026-02-15:
-        type: "文本模型"
-      qwen3.6-plus-2026-04-02:
-        type: "文本模型"
-      text-embedding-v4:
-        type: "嵌入模型"
-      wanx-v1-0521:
-        type: "视觉模型"
-    model: qwen3.5-27b
+- name: Baota
+  base_url: https://www.bt.cn/plugin_api/chat/openai/v1
+  api_key: ''
+  api_mode: chat_completions
+  models:
+    qwen3.5-plus: {}
+- name: aliyun-bailian
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  api_key: ${ALIYUN_BAILIAN_API_KEY}
+  api_mode: chat_completions
+  models:
+    MiniMax-M2.5:
+      type: 文本模型
+    animate-anyone:
+      type: 视觉模型
+    animate-anyone-detect:
+      type: 视觉模型
+    deepseek-v3.2:
+      type: 文本模型
+    emo:
+      type: 视觉模型
+    emo-detect:
+      type: 视觉模型
+    glm-5:
+      type: 文本模型
+    kimi-k2.5:
+      type: 文本模型
+    qwen-flash-2025-07-28:
+      type: 文本模型
+    qwen-plus-2025-07-28:
+      type: 文本模型
+    qwen-plus-2025-12-01:
+      type: 文本模型
+    qwen-vl-max-2025-08-13:
+      type: 视觉模型
+    qwen-vl-ocr-2025-11-20:
+      type: 视觉模型
+    qwen2.5-14b-instruct:
+      type: 文本模型
+    qwen2.5-32b-instruct:
+      type: 文本模型
+    qwen2.5-3b-instruct:
+      type: 文本模型
+    qwen2.5-72b-instruct:
+      type: 文本模型
+    qwen3-1.7b:
+      type: 文本模型
+    qwen3-235b-a22b-instruct-2507:
+      type: 文本模型
+    qwen3-32b:
+      type: 文本模型
+    qwen3-4b:
+      type: 文本模型
+    qwen3-embedding-0.6b:
+      type: 嵌入模型
+    qwen3-max-2025-09-23:
+      type: 文本模型
+    qwen3-moe-rerank-0.6b:
+      type: 嵌入模型
+    qwen3-next-80b-a3b-instruct:
+      type: 文本模型
+    qwen3-rerank:
+      type: 嵌入模型
+    qwen3-rerank-0.6b:
+      type: 嵌入模型
+    qwen3-vl-235b-a22b-instruct:
+      type: 视觉模型
+    qwen3-vl-2b-instruct:
+      type: 视觉模型
+    qwen3-vl-32b-instruct:
+      type: 视觉模型
+    qwen3-vl-4b-instruct:
+      type: 视觉模型
+    qwen3-vl-8b-instruct:
+      type: 视觉模型
+    qwen3-vl-embedding-2b:
+      type: 视觉模型
+    qwen3-vl-flash-2025-10-15:
+      type: 视觉模型
+    qwen3-vl-plus-2025-09-23:
+      type: 视觉模型
+    qwen3.5-122b-a10b:
+      type: 文本模型
+    qwen3.5-27b:
+      type: 文本模型
+    qwen3.5-35b-a3b:
+      type: 文本模型
+    qwen3.5-397b-a17b:
+      type: 文本模型
+    qwen3.5-9b:
+      type: 文本模型
+    qwen3.5-flash-2026-02-23:
+      type: 文本模型
+    qwen3.5-plus-2026-02-15:
+      type: 文本模型
+    qwen3.6-plus-2026-04-02:
+      type: 文本模型
+    text-embedding-v4:
+      type: 嵌入模型
+    wanx-v1-0521:
+      type: 视觉模型
+  model: qwen3.5-27b
 platforms:
   feishu:
     group_rules:
@@ -691,7 +805,7 @@ platforms:
 FEISHU_HOME_CHANNEL: oc_10d032f2e5b7b86d660945627d981888
 plugins:
   enabled:
-    - rtk-rewrite
+  - rtk-rewrite
 
 # ── Fallback Model ────────────────────────────────────────────────────
 # Automatic provider failover when primary is unavailable.
