@@ -16,12 +16,17 @@ Systematic approach to keeping a Linux server's disk clean — safely removing r
 # Overall usage
 df -h /
 
-# Biggest directories (one level deep)
-du -sh /* 2>/dev/null | sort -rh | head -20
+# Biggest directories — probe known-large dirs individually to avoid timeout
+du -sh /var/log /var/cache /tmp /root /www 2>/dev/null | sort -rh
 
-# Biggest dirs under /root
-du -sh /root/* /root/.* 2>/dev/null | sort -rh | head -30
+# For /root/, check specific known space hogs:
+du -sh /root/.cache /root/.npm /root/.local /root/hermes-backup* /root/.hermes.old* /root/.hermes.backup* 2>/dev/null | sort -rh
+
+# Check journald size
+journalctl --disk-usage 2>/dev/null
 ```
+
+> ⚠️ **`du -sh /*` can time out** on servers with 4G+ of logs or large cache directories. Always probe individual directories instead of scanning `/` or `/root/*` in one pass. Use `df -h` first for the overview, then target specific directories.
 
 ## Safe Cleanup Targets (by safety level)
 
@@ -62,9 +67,9 @@ du -sh /root/* /root/.* 2>/dev/null | sort -rh | head -30
 
 1. **Don't delete files that look like "backup" but are actually active backups.** Always check: is there a cron/systemd timer for it? Is it part of a daily rotation? If yes, leave it.
 2. **Swap files look big and idle but they're actively registered.** `swapon --show` tells you what's in use. Zero-used swap can still be needed under load.
-3. **npm cache can't be fully cleaned by `npm cache clean --force` alone.** Follow up with `rm -rf ~/.npm/_cacache`.
-4. **The user's Hermes config repo (`wangzhaotong-hermes/`) is NOT disposable.** It's the local clone of their GitHub repo with skills, config, and SOUL. Only the `hermes-agent-source/` subdirectory (source code snapshot) is safe to remove.
-5. **Always present the audit before deleting.** Per user preferences: "只读分析默认状态，写操作需明确确认." Show the list first, get confirmation.
+3. npm cache can't be fully cleaned by `npm cache clean --force` alone. Follow up with `rm -rf ~/.npm/_cacache`.
+4. **`du -sh /*` and broad `du` calls can time out on large filesystems.** On servers with 4G+ of logs or cached data, `du` traversing `/` or `/root/*` can hang for 30+ seconds and get killed by the tool timeout. **Workaround:** use the targeted probe commands in the Quick Assessment section above — check specific known-large directories instead of scanning all files in one pass.
+5. **Always present the audit before deleting.** Per user preference: show the list first, get confirmation.
 
 ## Setting Up Automated Cleanup
 

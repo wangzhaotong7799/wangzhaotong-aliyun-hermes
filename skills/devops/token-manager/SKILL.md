@@ -1,7 +1,7 @@
 ---
 name: token-manager
 description: "Token管家 — 每日 Token 用量统计（TokScale）+ Token 压缩（RTK）一体化管理"
-version: 1.3.0
+version: 1.4.0
 author: Hermes Agent
 metadata:
   hermes:
@@ -473,6 +473,7 @@ cat /tmp/tokscale_stderr.txt  # 应为空
 - **缓存命中率高**：DeepSeek 等提供商缓存命中率约 96-98%，实际净 Token 消耗远低于总量
 - **费用数据缺失**：部分模型（如 `deepseek-v4-flash`）在 Hermes DB 中 `cost_status = 'unknown'`，`estimated_cost_usd` 为 0。TokScale 有自己的定价逻辑，两者费用数据可能不一致。参考 6.3 节手动定价。
 - **rtk gain 数据是累计的**：使用 `rtk gain` 不带参数获得的是全量累计统计。日报应使用 `rtk gain --daily` 获取逐日明细。
+- **⚠️ `tail -5` 陷阱**：`rtk gain --daily | tail -5` 只取最后 5 行。如果最新数据距今较远（如本例中最新数据是 2026-05-31，但实际执行日期是 2026-06-09），`tail -5` 会悄悄跳过 6 月的 9 天空白区间，让你误以为这是最新数据。**先跑完整命令确认覆盖范围，再用 tail 截取需要部分。**
 - **RTK 数据可能不覆盖昨天**：`rtk gain --daily` 仅显示确实有 RTK 压缩活动的日期。如果某日没有命令行被 RTK 压缩（例如 Hermes 的 `rtk rewrite` 插件未触发），该日就不会出现在 `--daily` 输出中。此时日报应报告累计统计（`rtk gain` 的 TOTAL 行）并注明「昨日无 RTK 数据」。
 - **提供商账单偏差**：TokScale/Hermes DB 的 Token 统计与提供商官网账单的偏差是常态（DeepSeek 约 +36%）。每日报告应注明数据来源和可信度。详见 `references/billing-reconciliation.md`。
 
@@ -513,10 +514,14 @@ cat /tmp/tokscale_stderr.txt  # 应为空
    /root/.hermes/node/bin/tokscale graph --client hermes --since {昨天日期} --until {昨天日期} 2>/dev/null
    → 如果 TokScale 返回错误或超时（30s 以上），降级到 Hermes DB：
      sqlite3 /root/.hermes/state.db "SELECT COUNT(*) as sessions, SUM(message_count) as msgs, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(cache_read_tokens) as cache_read, SUM(cache_write_tokens) as cache_write, SUM(estimated_cost_usd) as cost FROM sessions WHERE date(started_at, 'unixepoch') = '{昨天日期}';"
+     → 注意检查 cost 字段：如果为 0.0（常见于 deepseek-v4-flash 等未配置 cost tracking 的模型），需进入步骤 5 手动估算
 
 3. 查询 RTK 压缩节约统计（注意用 --daily）：
-   rtk gain --daily 2>/dev/null | tail -5
-   → 如果昨天没数据（RTK 仅记录有压缩活动的日期），用 rtk gain 2>/dev/null 取 TOTAL 行作为累计参考
+   # 先跑完整命令确认昨天是否有数据（见 ⚠️ tail -5 陷阱）
+   rtk gain --daily 2>/dev/null
+   # 确认昨天日期出现在输出中后，再取 total 行
+   rtk gain --daily 2>/dev/null | grep -E "TOTAL|2026" | tail -3
+   → 如果昨天日期不在输出中（RTK 仅记录有压缩活动的日期），用 rtk gain 2>/dev/null 取 TOTAL 行作为累计参考，并注明「昨日无 RTK 压缩活动」
 
 4. 查询本月累计（本月1号到昨天）：
    sqlite3 /root/.hermes/state.db "SELECT SUM(input_tokens), SUM(output_tokens), SUM(cache_read_tokens) FROM sessions WHERE strftime('%Y-%m', started_at, 'unixepoch') = '本月' AND date(started_at, 'unixepoch') <= '{昨天日期}';"

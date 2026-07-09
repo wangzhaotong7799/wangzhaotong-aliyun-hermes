@@ -20,7 +20,16 @@ tags: [gaofang, monthly-report, statistics, database]
 - **患者去重** = 按（姓名 + 年龄 + 电话）三字段联合去重
 - **料数** = 数据库中 `quantity` 字段合计
 
-## 查询SQL
+## Cron 配置
+
+| 项目 | 内容 |
+|:----|:------|
+| 调度 | 每月 1 日 08:00 (`0 8 1 * *`) |
+| 交付 | 飞书私聊 (oc_10d032f2e5b7b86d660945627d981888) |
+| Cron Job ID | `ada277d8d953` |
+| 加载技能 | `gaofang-monthly-report` |
+
+> 修改或调试：`hermes cron edit ada277d8d953`
 
 ```sql
 WITH upload AS (
