@@ -94,12 +94,19 @@ LEFT JOIN dispense d ON u.月份 = d.月份
 ORDER BY u.月份;
 ```
 
-## Import defaults (from import_template.py)
+## Import rules (import_template.py)
 
-When Excel data is imported, empty/missing fields get these defaults:
-- 料数 (quantity) → 1
-- 医助 (assistant) → '-'
-- 是否传方 (is_prescription_sent) → '已传方'
+When Excel data is imported via `import_template.main()`:
+
+| 规则 | 行为 |
+|:----|:----|
+| 重复处方编号 | **覆盖更新**（保留复诊/审计字段，其余全量覆盖） |
+| 状态 | 强制设为 `'欠药'` |
+| 是否传方 | 强制设为 `'已传方'` |
+| 处方日期 | **强制设为导入当日** `date.today()`（忽略Excel中的处方日期） |
+| 料数空 | 默认 `1` |
+| 医助空 | 默认 `'-'` |
+| 支付状态=定金 | **跳过该条**（2026-07-15新增规则，不报错、不中断） |
 
 ## Data presentation rules
 
@@ -127,6 +134,8 @@ When the user asks to compare two periods (e.g., 2025 H1 vs 2026 H1):
 2. For YoY comparison, use `date` (处方日期) as the dimension — both years have prescription dates, but `created_at` may not span both years
 3. Present side-by-side: month | Year1患者 | Year1料数 | Year2患者 | Year2料数
 4. Add totals row with cross-period patient dedup (NOT sum of monthly patients)
+
+**Historical data note:** 2025年及更早的处方全部是在2026年3月一次性批量导入的（`created_at`集中在2026-03-18至2026-03-31）。因此按`created_at`统计2025年数据会全部归到2026年3月，不反映各月真实新增。跨年对比时应统一使用 `date`（处方日期）口径。
 
 ## Pitfalls
 
@@ -167,3 +176,4 @@ When the user asks for "上传" data:
 ## Reference files
 
 - `references/excel-cross-verify.md` — Step-by-step workflow for verifying database numbers against a user-provided import Excel file. Use when the user says "你的数据不对" and sends the original Excel.
+- `references/import-skip-rules.md` — Import rule change log: 支付状态=定金跳过规则（2026-07-15）

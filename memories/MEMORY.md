@@ -10,7 +10,7 @@ Token管家技能: token-manager(devops/)。TokScale+RTK已就绪，全局Hook�
 §
 天网增强采集：Agent-Reach v1.4.0+union-search-skill(30+引擎免API)+Scrapling v0.4.8(过Cloudflare)。天网skill v1.3，在gold-miner-sky。抖音/小红书用间接采集。
 §
-膏方V2: PostgreSQL(gaofang_v2, user=gaofang_app)，路径/workspace/projects/drug-distribution-system/gaofang-v2/。import默认: 状态=欠药, 已传方=已传方, 医助="-", 电话允许空。重复代煎号覆盖。排序按id降序。Gunicorn每日06:00 HUP热重启。Nginx临时目录权限修复cron每6小时。数据库查询细节见gaofang-data-analysis技能。
+膏方V2数据库(PostgreSQL,gaofang_app): su - postgres -c "psql -d gaofang_v2"。路径/workspace/projects/drug-distribution-system/gaofang-v2/。核心表prescription_records(date,patient_name,age,quantity料数,status已取/已邮寄/未取/欠药/已退药,patient_phone,created_at导入时间)。import默认:状态=欠药,已传方=已传方,医助="-",电话允许空。重复prescription_id覆盖更新。date强制=date.today()(导入当日),非Excel处方日期。Gunicorn每日06:00热重启。
 §
 元宝（Hermes Agent）以「元宝」身份为主人效力——资深运营顾问，AI合伙人。沟通铁律：我是元宝，主人是主人，绝不混淆身份。结论先行佐证在后、克制精准。工作风格：带判断的交付、数据说话（必有环比）、沉默守护。安全红线：只读分析默认状态，写操作需明确确认。输出标准：精简格式化、数据必有趋势判断。
 §
@@ -48,12 +48,12 @@ Token管家v1.2.0: v4-flash定价手动缓存(cache/pricing-litellm.json)。cron
 §
 主人会自己打开浏览器F12 Network面板找API请求并截图配合逆向工程，技术动手能力强。偏好直接给信息而非一步步解释。
 §
-用户基金持仓(2026-07-02)：总仓39.4万,股债65/35。选景顺长城A500(159353/022444)替换沪深300。池中银行主题基金：天弘中证银行ETF(515290/001594)，001594成立11年零分红。用户偏好5列简洁统计表，患者去重规则(姓名+年龄+电话)已达成共识。
+v0.18.0已升级。新增: MoA一等公民(预设可切换)、Completion Contracts(/learn即时创建技能、/journey记忆时间线)。
 §
-v0.18.0 (The Judgement Release) 已升级完成 (2026-07-03)。新增: MoA一等公民 + Completion Contracts(完成证明) + /learn即时创建技能 + /journey记忆时间线 + 后台子智能体fan-out + 关闭~700个P0/P1 issue。升级成功：hermes update 脚本实际已完成(v0.17.0→v0.18.0)，Web UI重建+Node/Python依赖全部更新完毕。
+Daisy Financial Research + stocks skill已装。TUSHARE_TOKEN已配。Hermes venv有tushare/akshare/yfinance/stockstats。Daisy的SKILL.md已适配Hermes原生web_search/web_extract。池中银行基金：天弘中证银行(515290/001594,11年零分红)。
 §
-Daisy Financial Research + official stocks skill 已安装。TUSHARE_TOKEN 已配入.env。Hermes venv已装tushare/akshare/yfinance/pandas/stockstats。使用：日常快速查价用 stocks skill，深度研究用 Daisy（需先 /skill daisy-financial-research 加载技能）。
+Fund pool (~/.hermes/fund_portfolio.db): 24只基金。银行主题: 天弘中证银行(515290/001594,零分红)。A500景顺长城(159353/022444)为推荐宽基替换标的。2025H1(按处方):854人/1766料,2026H1(按处方):502人/1716料。gaofang-monthly-report skill+cron每月1日08:00推飞书。
 §
-Fund pool database (~/.hermes/fund_portfolio.db) has bank-themed fund: 天弘中证银行ETF (场内515290/场外001594), currently not held. Daisy Financial Research + official stocks skill installed. Daisy's SKILL.md patched to note this installation uses Hermes native tools (web_search/web_extract) instead of Brave MCP/Bailian MCP — see daisy references/hermes-native-tool-routing.md.
+膏方V2统计口径:按created_at(导入时间)非date;患者去重KEY=(name+age+phone);上传=当月导入数;发放=status IN ('已取','已邮寄');输出5列(月份|上传患者数|上传总料数|发放患者数|发放料数)。skill:gaofang-monthly-report + cron每月1日08:00推飞书。2025H1(按处方):854人/1766料,2026H1:502人/1716料。统计月报口径用导入时间。
 §
-膏方V2数据库(PostgreSQL, gaofang_app)：su - postgres -c "psql -d gaofang_v2"。核心表prescription_records: date(处方日期), patient_name, age(整数), quantity(料数), decoction_material_type(全料), decoction_prescription_type(协定方/辩证方), status(已取/已邮寄/未取/欠药/已退药), patient_phone, is_prescription_sent, created_at(导入时间)。统计报告：口径=按created_at(导入时间)非date; 患者去重KEY=(name+age+phone); 上传=当月导入所有; 发放=status IN ('已取','已邮寄'); 只输出5列(月份|上传患者数|上传总料数|发放患者数|发放料数)。skill:gaofang-monthly-report + cron每月1日08:00推飞书。
+DeepSeek 峰谷定价(7月中旬起)：高峰9-12点和14-18点2倍价格。所有Cron已避开高峰。主人偏好成本敏感调度，大批量任务/对话建议安排谷时(12-14点或18点后)。
