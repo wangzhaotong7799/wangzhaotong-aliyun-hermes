@@ -2,10 +2,12 @@
 """
 Exa 多赛道搜索模板
 ====================
-用途：一键搜索多个赛道/关键词，输出 Markdown 表格（人工阅读）+ 年份标注
-用法：修改下方的 TRACKS 列表即可复用，无需修改其他代码
+用途：一键搜索多个赛道/关键词，输出 Markdown（人工阅读）+ JSON 数据块（程序化年份验证）
+用法：修改下方的 TRACKS 列表即可复用
 
-⚠️ truncate=1200 是避免年份被误剔除的关键参数（低于800会导致大量条目"无日期"）
+⚠️ truncate=1200 是避免年份被误剔除的关键参数
+✅ 包含 publishedDate 字段捕获 + 多策略年份检测
+✅ 输出含 year_distribution + track_stats 用于年份验证闸门
 """
 
 import json, os, urllib.request, time, sys, re
@@ -37,16 +39,12 @@ if not api_key:
     print("ERROR: 无法读取 EXA_API_KEY")
     sys.exit(1)
 
-output_lines = []
-output_lines.append("# 天网数据采集 — 多赛道搜索\n")
-output_lines.append(f"> 采集日期: {time.strftime('%Y-%m-%d')} | 引擎: Exa API\n")
-output_lines.append(f"> 赛道数: {len(TRACKS)} | truncate=1200\n\n")
-
+all_results = []
 total_results = 0
 
 for query, note, num in TRACKS:
     print(f"搜索中: [{note}] {query[:50]}...")
-    time.sleep(0.3)  # 限速
+    time.sleep(0.3)
 
     payload = json.dumps({
         "query": query,
@@ -58,64 +56,114 @@ for query, note, num in TRACKS:
     try:
         req = urllib.request.Request(
             "https://api.exa.ai/search", data=payload,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            headers={"Authorization": f"Bearer {api_key}",
+                     "Content-Type": "application/json"},
             method="POST"
         )
         resp = urllib.request.urlopen(req, timeout=30)
         data = json.loads(resp.read())
         results = data.get("results", [])
 
-        output_lines.append(f"\n## [{note}] - {query}\n")
-        output_lines.append("| # | 标题 | URL | 摘要(前100字) | 年份判定 | 判定依据 |\n")
-        output_lines.append("|---|------|-----|---------------|---------|---------|\n")
+        for r in results:
+            url = r.get("url", "")
+            title = r.get("title", "")
+            text = r.get("text", "") or ""
+            pd = r.get("publishedDate", "") or ""
 
-        for idx, r in enumerate(results, 1):
-            title = r.get('title', '?').replace('|', '\\|')
-            url = r.get('url', '?')
-            text = r.get('text', '')[:200].replace('\n', ' ').replace('|', '/')
-            full_for_check = title + ' ' + (r.get('text', '')[:500])
+            # 多策略年份检测
+            year = "unknown"
+            source = "none"
 
-            # 多策略年份判定
-            # (1) URL路径
-            url_2026 = bool(re.search(r'/2026/', url))
-            url_2025 = bool(re.search(r'/2025/', url))
-            # (2) 标题显式
-            title_2026 = bool(re.search(r'2026', title))
-            title_2025 = bool(re.search(r'2025', title))
-            # (3) 正文日期
-            text_2026 = bool(re.search(r'2026[年./\-]', full_for_check[:300]))
+            # 策略1: publishedDate 字段
+            if pd and pd[:4].isdigit():
+                y = int(pd[:4])
+                if 2020 <= y <= 2026:
+                    year, source = str(y), "publishedDate"
 
-            # 综合判定 - 优先信任URL > 标题 > 正文
-            if url_2026:
-                year_info, reason = "2026 ✅", "URL含/2026/"
-            elif title_2026 and not title_2025:
-                year_info, reason = "2026 ✅", "标题含2026"
-            elif text_2026 and not title_2025:
-                year_info, reason = "2026 ✅", "正文含2026年"
-            elif url_2025:
-                year_info, reason = "2025 ❌", "URL含/2025/"
-            elif title_2025:
-                year_info, reason = "2025 ❌", "标题含2025"
-            else:
-                year_info, reason = "? ⚠️", "无明确年份标记"
+            # 策略2: URL 路径
+            if year == "unknown":
+                m = re.findall(r'/(20[12]\d)[/\-]', url)
+                if m:
+                    y = int(m[0])
+                    if 2020 <= y <= 2026:
+                        year, source = str(y), "url"
 
-            output_lines.append(f"| {idx} | {title} | {url} | {text[:100]}... | {year_info} | {reason} |\n")
+            # 策略3: 标题
+            if year == "unknown":
+                m = re.search(r'(20[12]\d)', title)
+                if m:
+                    y = int(m.group(1))
+                    if 2020 <= y <= 2026:
+                        year, source = str(y), "title"
+
+            # 策略4: 正文前600字
+            if year == "unknown":
+                m = re.search(r'2026[年/\-\.]', text[:600])
+                if m:
+                    year, source = "2026", "text"
+
+            record = {
+                "track": note,
+                "title": title[:120],
+                "url": url[:200],
+                "text_snippet": text[:300].replace("\n", " "),
+                "data_year": year,
+                "year_source": source,
+                "publishedDate": pd,
+                "collected_at": time.strftime("%Y-%m-%d")
+            }
+            all_results.append(record)
             total_results += 1
 
-        output_lines.append(f"\n--- {note} 采集到 {len(results)} 条结果 ---\n")
+            mark = "✅" if (year != "unknown" and int(year) >= 2026) else \
+                   ("❌" if (year != "unknown" and int(year) < 2026) else "❓")
+            print(f"  {mark} [{year}/{source}] {title[:60]}")
 
     except Exception as e:
-        output_lines.append(f"\n## [{note}] - ERROR: {e}\n\n")
-        print(f"  ERROR: {e}")
+        print(f"  ERROR [{note}]: {e}")
 
-output_lines.append(f"\n\n---\n## 采集统计\n")
-output_lines.append(f"- 总搜索次数: {len(TRACKS)}\n")
-output_lines.append(f"- 总结果条数: {total_results}\n")
-output_lines.append(f"- 采集时间: {time.strftime('%Y-%m-%d')}\n")
+# 统计
+pass_rate_data = {}
+for r in all_results:
+    t = r["track"]
+    if t not in pass_rate_data:
+        pass_rate_data[t] = {"total": 0, "valid": 0}
+    pass_rate_data[t]["total"] += 1
+    if r["data_year"] != "unknown" and int(r["data_year"]) >= 2026:
+        pass_rate_data[t]["valid"] += 1
 
-output = ''.join(output_lines)
+valid_total = sum(d["valid"] for d in pass_rate_data.values())
+
+print(f"\n=== 采集统计 ===")
+print(f"总记录数: {total_results}")
+print(f"有效(≥2026): {valid_total}/{total_results} = {valid_total/total_results*100:.1f}%")
+for t, d in sorted(pass_rate_data.items()):
+    pct = d["valid"]/d["total"]*100 if d["total"] else 0
+    print(f"  {t}: {d['valid']}/{d['total']} ({pct:.1f}%)")
+
+# 保存
+output = {
+    "total": total_results,
+    "valid": valid_total,
+    "pass_rate": f"{valid_total/total_results*100:.1f}%",
+    "track_stats": pass_rate_data,
+    "results": all_results
+}
+
 output_path = f"data/tianwang_{time.strftime('%Y%m%d')}.md"
-with open(output_path, 'w', encoding='utf-8') as f:
-    f.write(output)
+with open(output_path, "w", encoding="utf-8") as f:
+    f.write(f"# 天网数据采集 — {time.strftime('%Y-%m-%d')}\n\n")
+    f.write(f"> 赛道数: {len(TRACKS)} | truncate=1200 | 引擎: Exa API\n\n")
+    f.write("## 采集统计\n\n")
+    f.write("| 赛道 | 总记录 | 有效(≥2026) | 通过率 |\n")
+    f.write("|:---|---:|:---:|:---:|\n")
+    for t, d in sorted(pass_rate_data.items()):
+        pct = d["valid"]/d["total"]*100 if d["total"] else 0
+        f.write(f"| {t} | {d['total']} | {d['valid']} | {pct:.1f}% |\n")
+    f.write(f"| **合计** | {total_results} | {valid_total} | {valid_total/total_results*100:.1f}% |\n\n")
+    f.write("## 详细数据（JSON数据块）\n\n")
+    f.write("```json_data_block\n")
+    f.write(json.dumps(output, ensure_ascii=False, indent=2))
+    f.write("\n```\n")
 
-print(f"\n完成！{total_results} 条结果写入 {output_path}")
+print(f"\n✅ 结果已保存: {output_path}")
