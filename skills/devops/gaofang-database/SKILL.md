@@ -1,7 +1,9 @@
 ---
 name: gaofang-database
 description: Query the gaofang_v2 PostgreSQL database — monthly statistics, import analysis, status reports, patient dedup. Covers connection method, key tables, field semantics, and the user's preferred aggregation conventions.
-version: 1.0.0
+version: 1.1.0
+tags: [gaofang, database, postgresql, statistics]
+related_skills: [gaofang-monthly-report]
 ---
 
 # Gaofang Database (gaofang_v2 PostgreSQL)
@@ -107,6 +109,14 @@ When Excel data is imported via `import_template.main()`:
 | 料数空 | 默认 `1` |
 | 医助空 | 默认 `'-'` |
 | 支付状态=定金 | **跳过该条**（2026-07-15新增规则，不报错、不中断） |
+
+### Import result message
+
+Result format after import (2026-07-15 update):
+```
+导入完成: 新增 2 条, 覆盖更新 10 条, 合计 18 料
+```
+The total 料数 is accumulated from `quantity` for both new AND updated records during processing. Skipped records (e.g., 定金) are NOT counted in the 合计.
 
 ## Data presentation rules
 

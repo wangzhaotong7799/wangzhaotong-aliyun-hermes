@@ -4,6 +4,7 @@ description: 膏方管理系统月度统计报告 — 按导入时间统计每�
 version: 1.0.0
 author: wangzhaotong
 tags: [gaofang, monthly-report, statistics, database]
+related_skills: [gaofang-database]
 ---
 
 # 膏方月度统计报告

@@ -4,12 +4,12 @@ model:
   reasoning_config:
     enabled: false
   base_url: https://api.deepseek.com/v1
-providers: {}
+providers:
+  aliyun-bailian:
+    base_url: https://llm-4640148b5gorepuw.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
 fallback_providers: []
-credential_pool_strategies: {}
 toolsets:
-- hermes-cli
-max_concurrent_sessions: null
+  - hermes-cli
 agent:
   max_turns: 90
   gateway_timeout: 1800
@@ -79,7 +79,6 @@ terminal:
   auto_source_bashrc: true
   docker_image: nikolaik/python-nodejs:python3.11-nodejs20
   docker_forward_env: []
-  docker_env: {}
   singularity_image: docker://nikolaik/python-nodejs:python3.11-nodejs20
   modal_image: nikolaik/python-nodejs:python3.11-nodejs20
   daytona_image: nikolaik/python-nodejs:python3.11-nodejs20
@@ -124,7 +123,6 @@ checkpoints:
   retention_days: 7
   delete_orphans: true
   min_interval_hours: 24
-context_file_max_chars: null
 file_read_max_chars: 100000
 mcp_discovery_timeout: 1.5
 tool_output:
@@ -160,7 +158,6 @@ kanban:
   worker_log_backup_count: 1
   orchestrator_profile: ''
   default_assignee: ''
-  max_in_progress_per_profile: null
   auto_decompose: true
   auto_decompose_per_tick: 3
   dispatch_stale_timeout_seconds: 14400
@@ -184,11 +181,10 @@ bedrock:
 auxiliary:
   vision:
     provider: aliyun-bailian
-    model: qwen3-vl-plus-2025-09-23
-    base_url: ''
-    api_key: ''
+    model: qwen3.5-omni-plus
+    base_url: https://llm-4640148b5gorepuw.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+    api_key: sk-ad6fe9df04954d0e950cb2256b12d179
     timeout: 120
-    extra_body: {}
     download_timeout: 30
   web_extract:
     provider: auto
@@ -196,42 +192,36 @@ auxiliary:
     base_url: ''
     api_key: ''
     timeout: 360
-    extra_body: {}
   compression:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 120
-    extra_body: {}
   skills_hub:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 30
-    extra_body: {}
   approval:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 30
-    extra_body: {}
   mcp:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 30
-    extra_body: {}
   title_generation:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 30
-    extra_body: {}
     language: ''
   tts_audio_tags:
     provider: auto
@@ -239,49 +229,42 @@ auxiliary:
     base_url: ''
     api_key: ''
     timeout: 30
-    extra_body: {}
   triage_specifier:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 120
-    extra_body: {}
   kanban_decomposer:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 180
-    extra_body: {}
   profile_describer:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 60
-    extra_body: {}
   curator:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 600
-    extra_body: {}
   monitor:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 60
-    extra_body: {}
   background_review:
     provider: auto
     model: ''
     base_url: ''
     api_key: ''
     timeout: 120
-    extra_body: {}
   session_search:
     provider: auto
     model: ''
@@ -334,7 +317,6 @@ display:
     last_lines: 2
   interim_assistant_messages: true
   tool_progress_command: false
-  tool_progress_overrides: {}
   tool_preview_length: 0
   tool_progress_grouping: accumulate
   reasoning_style: code
@@ -347,9 +329,9 @@ display:
   runtime_footer:
     enabled: false
     fields:
-    - model
-    - context_pct
-    - cwd
+      - model
+      - context_pct
+      - cwd
   copy_shortcut: auto
   pet:
     enabled: false
@@ -450,14 +432,14 @@ delegation:
   child_timeout_seconds: 600
   reasoning_effort: ''
   max_concurrent_children: 3
-  max_async_children: 3
   max_spawn_depth: 1
   orchestrator_enabled: true
   subagent_auto_approve: false
+  max_async_children: 3
   default_toolsets:
-  - terminal
-  - file
-  - web
+    - terminal
+    - file
+    - web
 prefill_messages_file: ''
 goals:
   max_turns: 20
@@ -480,13 +462,11 @@ curator:
   backup:
     enabled: true
     keep: 5
-honcho: {}
 timezone: ''
 slack:
   require_mention: true
   free_response_channels: ''
   allowed_channels: ''
-  channel_prompts: {}
 discord:
   require_mention: true
   free_response_channels: ''
@@ -496,7 +476,6 @@ discord:
   history_backfill: true
   history_backfill_limit: 50
   reactions: true
-  channel_prompts: {}
   dm_role_auth_guild: ''
   server_actions: ''
   allow_any_attachment: false
@@ -510,15 +489,13 @@ discord:
     speech_gain: 1.0
     ack_enabled: true
     ack_phrases:
-    - Let me look into that.
-    - One moment.
-    - Checking on that now.
-    - Give me a sec.
-    - On it.
-whatsapp: {}
+      - Let me look into that.
+      - One moment.
+      - Checking on that now.
+      - Give me a sec.
+      - On it.
 telegram:
   reactions: false
-  channel_prompts: {}
   allowed_chats: ''
   extra:
     rich_messages: false
@@ -527,7 +504,6 @@ mattermost:
   require_mention: true
   free_response_channels: ''
   allowed_channels: ''
-  channel_prompts: {}
 matrix:
   require_mention: true
   free_response_rooms: ''
@@ -539,25 +515,22 @@ approvals:
   mcp_reload_confirm: true
   destructive_slash_confirm: false
 command_allowlist:
-- in-place edit of system config
-- stop/restart hermes gateway (kills running agents)
-- kill hermes/gateway process (self-termination)
-- copy/move file into system config path
-- stop/restart system service
-- delete in root path
-- hermes update (restarts gateway, kills running agents)
-- overwrite system config
-- overwrite system file via redirection
-- SQL DELETE without WHERE
-- overwrite project env/config file
-- script execution via heredoc
-- recursive delete
-- script execution via -e/-c flag
-quick_commands: {}
-platform_hints: {}
-hooks: {}
+  - kill hermes/gateway process (self-termination)
+  - delete in root path
+  - script execution via heredoc
+  - stop/restart hermes gateway (kills running agents)
+  - recursive delete
+  - overwrite system file via redirection
+  - in-place edit of system config
+  - hermes update (restarts gateway, kills running agents)
+  - stop/restart system service
+  - overwrite project env/config file
+  - script execution via -e/-c flag
+  - SQL DELETE without WHERE
+  - overwrite system config
+  - copy/move file into system config path
+  - in-place edit of Hermes config/env
 hooks_auto_accept: false
-personalities: {}
 security:
   allow_private_urls: false
   redact_secrets: true
@@ -579,7 +552,6 @@ cron:
     expected_audience: ''
     nas_jwks_url: ''
   wrap_response: true
-  max_parallel_jobs: null
 code_execution:
   mode: project
   timeout: 300
@@ -604,7 +576,7 @@ model_catalog:
   providers:
     deepseek:
       models:
-      - deepseek-v4-flash
+        - deepseek-v4-flash
 network:
   force_ipv4: false
 gateway:
@@ -646,7 +618,6 @@ lsp:
   wait_mode: document
   wait_timeout: 5.0
   install_strategy: auto
-  servers: {}
 x_search:
   model: grok-4.20-reasoning
   timeout_seconds: 180
@@ -673,126 +644,126 @@ session_reset:
 group_sessions_per_user: true
 platform_toolsets:
   cli:
-  - hermes-cli
+    - hermes-cli
   telegram:
-  - hermes-telegram
+    - hermes-telegram
   discord:
-  - hermes-discord
+    - hermes-discord
   whatsapp:
-  - hermes-whatsapp
+    - hermes-whatsapp
   slack:
-  - hermes-slack
+    - hermes-slack
   signal:
-  - hermes-signal
+    - hermes-signal
   homeassistant:
-  - hermes-homeassistant
+    - hermes-homeassistant
   qqbot:
-  - hermes-qqbot
+    - hermes-qqbot
   feishu:
-  - hermes-feishu
+    - hermes-feishu
 custom_providers:
-- name: Baota
-  base_url: https://www.bt.cn/plugin_api/chat/openai/v1
-  api_key: ''
-  api_mode: chat_completions
-  models:
-    qwen3.5-plus: {}
-- name: aliyun-bailian
-  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-  api_key: ${ALIYUN_BAILIAN_API_KEY}
-  api_mode: chat_completions
-  models:
-    MiniMax-M2.5:
-      type: 文本模型
-    animate-anyone:
-      type: 视觉模型
-    animate-anyone-detect:
-      type: 视觉模型
-    deepseek-v3.2:
-      type: 文本模型
-    emo:
-      type: 视觉模型
-    emo-detect:
-      type: 视觉模型
-    glm-5:
-      type: 文本模型
-    kimi-k2.5:
-      type: 文本模型
-    qwen-flash-2025-07-28:
-      type: 文本模型
-    qwen-plus-2025-07-28:
-      type: 文本模型
-    qwen-plus-2025-12-01:
-      type: 文本模型
-    qwen-vl-max-2025-08-13:
-      type: 视觉模型
-    qwen-vl-ocr-2025-11-20:
-      type: 视觉模型
-    qwen2.5-14b-instruct:
-      type: 文本模型
-    qwen2.5-32b-instruct:
-      type: 文本模型
-    qwen2.5-3b-instruct:
-      type: 文本模型
-    qwen2.5-72b-instruct:
-      type: 文本模型
-    qwen3-1.7b:
-      type: 文本模型
-    qwen3-235b-a22b-instruct-2507:
-      type: 文本模型
-    qwen3-32b:
-      type: 文本模型
-    qwen3-4b:
-      type: 文本模型
-    qwen3-embedding-0.6b:
-      type: 嵌入模型
-    qwen3-max-2025-09-23:
-      type: 文本模型
-    qwen3-moe-rerank-0.6b:
-      type: 嵌入模型
-    qwen3-next-80b-a3b-instruct:
-      type: 文本模型
-    qwen3-rerank:
-      type: 嵌入模型
-    qwen3-rerank-0.6b:
-      type: 嵌入模型
-    qwen3-vl-235b-a22b-instruct:
-      type: 视觉模型
-    qwen3-vl-2b-instruct:
-      type: 视觉模型
-    qwen3-vl-32b-instruct:
-      type: 视觉模型
-    qwen3-vl-4b-instruct:
-      type: 视觉模型
-    qwen3-vl-8b-instruct:
-      type: 视觉模型
-    qwen3-vl-embedding-2b:
-      type: 视觉模型
-    qwen3-vl-flash-2025-10-15:
-      type: 视觉模型
-    qwen3-vl-plus-2025-09-23:
-      type: 视觉模型
-    qwen3.5-122b-a10b:
-      type: 文本模型
-    qwen3.5-27b:
-      type: 文本模型
-    qwen3.5-35b-a3b:
-      type: 文本模型
-    qwen3.5-397b-a17b:
-      type: 文本模型
-    qwen3.5-9b:
-      type: 文本模型
-    qwen3.5-flash-2026-02-23:
-      type: 文本模型
-    qwen3.5-plus-2026-02-15:
-      type: 文本模型
-    qwen3.6-plus-2026-04-02:
-      type: 文本模型
-    text-embedding-v4:
-      type: 嵌入模型
-    wanx-v1-0521:
-      type: 视觉模型
-  model: qwen3.5-27b
+  - name: Baota
+    base_url: https://www.bt.cn/plugin_api/chat/openai/v1
+    api_key: ''
+    api_mode: chat_completions
+    models:
+      qwen3.5-plus: {}
+  - name: aliyun-bailian
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    api_key: ${ALIYUN_BAILIAN_API_KEY}
+    api_mode: chat_completions
+    models:
+      MiniMax-M2.5:
+        type: 文本模型
+      animate-anyone:
+        type: 视觉模型
+      animate-anyone-detect:
+        type: 视觉模型
+      deepseek-v3.2:
+        type: 文本模型
+      emo:
+        type: 视觉模型
+      emo-detect:
+        type: 视觉模型
+      glm-5:
+        type: 文本模型
+      kimi-k2.5:
+        type: 文本模型
+      qwen-flash-2025-07-28:
+        type: 文本模型
+      qwen-plus-2025-07-28:
+        type: 文本模型
+      qwen-plus-2025-12-01:
+        type: 文本模型
+      qwen-vl-max-2025-08-13:
+        type: 视觉模型
+      qwen-vl-ocr-2025-11-20:
+        type: 视觉模型
+      qwen2.5-14b-instruct:
+        type: 文本模型
+      qwen2.5-32b-instruct:
+        type: 文本模型
+      qwen2.5-3b-instruct:
+        type: 文本模型
+      qwen2.5-72b-instruct:
+        type: 文本模型
+      qwen3-1.7b:
+        type: 文本模型
+      qwen3-235b-a22b-instruct-2507:
+        type: 文本模型
+      qwen3-32b:
+        type: 文本模型
+      qwen3-4b:
+        type: 文本模型
+      qwen3-embedding-0.6b:
+        type: 嵌入模型
+      qwen3-max-2025-09-23:
+        type: 文本模型
+      qwen3-moe-rerank-0.6b:
+        type: 嵌入模型
+      qwen3-next-80b-a3b-instruct:
+        type: 文本模型
+      qwen3-rerank:
+        type: 嵌入模型
+      qwen3-rerank-0.6b:
+        type: 嵌入模型
+      qwen3-vl-235b-a22b-instruct:
+        type: 视觉模型
+      qwen3-vl-2b-instruct:
+        type: 视觉模型
+      qwen3-vl-32b-instruct:
+        type: 视觉模型
+      qwen3-vl-4b-instruct:
+        type: 视觉模型
+      qwen3-vl-8b-instruct:
+        type: 视觉模型
+      qwen3-vl-embedding-2b:
+        type: 视觉模型
+      qwen3-vl-flash-2025-10-15:
+        type: 视觉模型
+      qwen3-vl-plus-2025-09-23:
+        type: 视觉模型
+      qwen3.5-122b-a10b:
+        type: 文本模型
+      qwen3.5-27b:
+        type: 文本模型
+      qwen3.5-35b-a3b:
+        type: 文本模型
+      qwen3.5-397b-a17b:
+        type: 文本模型
+      qwen3.5-9b:
+        type: 文本模型
+      qwen3.5-flash-2026-02-23:
+        type: 文本模型
+      qwen3.5-plus-2026-02-15:
+        type: 文本模型
+      qwen3.6-plus-2026-04-02:
+        type: 文本模型
+      text-embedding-v4:
+        type: 嵌入模型
+      wanx-v1-0521:
+        type: 视觉模型
+    model: qwen3.5-27b
 platforms:
   feishu:
     group_rules:
@@ -805,26 +776,4 @@ platforms:
 FEISHU_HOME_CHANNEL: oc_10d032f2e5b7b86d660945627d981888
 plugins:
   enabled:
-  - rtk-rewrite
-
-# ── Fallback Model ────────────────────────────────────────────────────
-# Automatic provider failover when primary is unavailable.
-# Uncomment and configure to enable. Triggers on rate limits (429),
-# overload (529), service errors (503), or connection failures.
-#
-# Supported providers:
-#   openrouter   (OPENROUTER_API_KEY)  — routes to any model
-#   openai-codex (OAuth — hermes auth) — OpenAI Codex
-#   nous         (OAuth — hermes auth) — Nous Portal
-#   zai          (ZAI_API_KEY)         — Z.AI / GLM
-#   kimi-coding  (KIMI_API_KEY)        — Kimi / Moonshot
-#   kimi-coding-cn (KIMI_CN_API_KEY)   — Kimi / Moonshot (China)
-#   minimax      (MINIMAX_API_KEY)     — MiniMax
-#   minimax-cn   (MINIMAX_CN_API_KEY)  — MiniMax (China)
-#   bedrock      (AWS IAM / boto3)     — AWS Bedrock (Converse API)
-#
-# For custom OpenAI-compatible endpoints, add base_url and key_env.
-#
-# fallback_model:
-#   provider: openrouter
-#   model: anthropic/claude-sonnet-4
+    - rtk-rewrite
