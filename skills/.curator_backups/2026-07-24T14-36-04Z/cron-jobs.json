@@ -1,0 +1,591 @@
+{
+  "jobs": [
+    {
+      "id": "f6e44a67cfeb",
+      "name": "\u7535\u5546\u5468\u62a5",
+      "prompt": "CRON_MODE\nPARALLEL_COLLECTION\n\n\u57df\uff1a\u7535\u5546\n\u8d5b\u9053\uff1a\u56fd\u5185\u7535\u5546\u5e73\u53f0(\u6dd8\u5b9d/\u5929\u732b/\u4eac\u4e1c)\u3001\u62fc\u591a\u591a\u767d\u724c\u3001\u5feb\u624b\u7535\u5546\u3001\u89c6\u9891\u53f7\u7535\u5546\u3001\n      \u76f4\u64ad\u7535\u5546(\u6296\u97f3)\u3001\u793e\u4ea4\u7535\u5546(\u5c0f\u7ea2\u4e66/\u5fae\u4fe1\u79c1\u57df)\u3001TikTok Shop\u3001\n      TEMU\u5168\u6258\u7ba1\u3001\u4e1c\u5357\u4e9a\u7535\u5546\u3001\u5373\u65f6\u96f6\u552e\n\u6570\u636e\u5e73\u53f0\uff1a\u7efc\u5408\n\n**\u8f93\u51fa\u8981\u6c42\uff08\u53cc\u7248\u672c\uff09\uff1a**\n1. \u5b8c\u6574\u7248\u62a5\u544a \u2192 \u5199\u5165 Markdown \u6587\u4ef6\uff08\u7528\u4e8e Word \u9644\u4ef6\u8f6c\u6362\uff09\n2. \u7cbe\u7b80\u7248\u6458\u8981 \u2192 \u4f5c\u4e3a\u6700\u7ec8\u8f93\u51fa\uff08\u5373\u98de\u4e66\u6587\u672c\u6d88\u606f\uff09\uff0c\u4ec5\u5305\u542b\uff1a\u8bc4\u5206\u6392\u884c\u8868 + Top 3 \u6838\u5fc3\u6570\u636e + \u4e00\u53e5\u8bdd\u603b\u7ed3\n   \u7cbe\u7b80\u6458\u8981\u63a7\u5236\u5728 50-80 \u884c\u4ee5\u5185\n\n**\u6570\u636e\u8d28\u91cf\u5f3a\u5236\u8981\u6c42\uff08\u4f18\u5148\u6267\u884c\uff09\uff1a**\n1. \u53ea\u91c7\u96c62026\u5e74\u53d1\u5e03\u7684\u516c\u5f00\u6570\u636e\uff0c2025\u5e74\u53ca\u4ee5\u524d\u7684\u6570\u636e\u7981\u6b62\u4f7f\u7528\n2. \u6bcf\u6761\u91c7\u96c6\u6570\u636e\u5fc5\u987b\u6807\u6ce8\u539f\u59cb\u53d1\u5e03\u65e5\u671f\u548c `data_year`\n3. \u4e25\u7981\u7be1\u6539\u6216\u91cd\u6807\u6570\u636e\u5e74\u4efd\n4. \u6267\u884c\u5e74\u4efd\u9a8c\u8bc1\u95f8\u95e8\uff08\u9636\u6bb5\u4e09\uff09\u5e76\u5199\u5165 quality_gate_report.md\n5. \u62a5\u544a\u7ed3\u8bba\u5fc5\u987b\u6ce8\u660e\u6570\u636e\u8986\u76d6\u7684\u5e74\u4efd\u8303\u56f4\n\n**\u5e76\u884c\u91c7\u96c6\u8981\u6c42\uff08\u56e0\u5305\u542b PARALLEL_COLLECTION \u6807\u8bb0\uff09\uff1a**\n\u91c7\u96c6\u9636\u6bb5\u4f7f\u7528 delegate_task(tasks=[...]) \u6279\u91cf\u6a21\u5f0f\uff0c\u5c0610\u4e2a\u8d5b\u9053\u62c6\u62103\u7ec4\u5e76\u884c\u91c7\u96c6\uff1a\n- \u7b2c1\u7ec4\uff1a\u56fd\u5185\u7535\u5546\u5e73\u53f0(\u6dd8\u5b9d/\u5929\u732b/\u4eac\u4e1c)\u3001\u62fc\u591a\u591a\u767d\u724c + \u5e73\u53f0\u653f\u7b56\n- \u7b2c2\u7ec4\uff1a\u5feb\u624b\u7535\u5546\u3001\u89c6\u9891\u53f7\u7535\u5546\u3001\u76f4\u64ad\u7535\u5546(\u6296\u97f3)\u3001\u793e\u4ea4\u7535\u5546(\u5c0f\u7ea2\u4e66/\u5fae\u4fe1\u79c1\u57df) + \u5931\u8d25\u6848\u4f8b\n- \u7b2c3\u7ec4\uff1aTikTok Shop\u3001TEMU\u5168\u6258\u7ba1\u3001\u4e1c\u5357\u4e9a\u7535\u5546\u3001\u5373\u65f6\u96f6\u552e + \u8865\u5145\u641c\u7d22\n\u4e09\u8def\u8fd4\u56de\u540e\u5408\u5e76\u6570\u636e\uff0c\u7edf\u4e00\u8fc7\u5e74\u4efd\u9a8c\u8bc1\u95f8\u95e8\u3002\u540e\u7eed\u8bc4\u5206/\u7b56\u7565/\u62a5\u544a\u6d41\u7a0b\u4e0d\u53d8\u3002\n\n\u6309\u7167\u730e\u8d22SOP\uff0c\u8df3\u8fc7\u57df\u9002\u914d\u786e\u8ba4\uff0c\u76f4\u63a5\u6309\u57df\u914d\u7f6e\u6267\u884c\u5168\u6d41\u7a0b\u3002\n\u5b8c\u6210\u540e\uff1a\n1. \u5b8c\u6574\u7248\u62a5\u544a\u4fdd\u5b58\u4e3a data/report_YYYYMM.md\uff0c\u7528\u4e8e md_to_feishu_docx.py \u8f6c Word \u9644\u4ef6\n2. \u7cbe\u7b80\u7248\u6458\u8981\u4f5c\u4e3a final response \u81ea\u52a8\u4ea4\u4ed8\u98de\u4e66",
+      "skills": [
+        "wealth-analyst"
+      ],
+      "skill": "wealth-analyst",
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": null,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 5 * * 1",
+        "display": "0 5 * * 1"
+      },
+      "schedule_display": "0 5 * * 1",
+      "repeat": {
+        "times": null,
+        "completed": 12
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-05-02T15:04:01.320335+08:00",
+      "next_run_at": "2026-07-27T05:00:00+08:00",
+      "last_run_at": "2026-07-20T05:13:10.620278+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "feishu:oc_10d032f2e5b7b86d660945627d981888",
+      "origin": null,
+      "enabled_toolsets": [
+        "delegation",
+        "web",
+        "terminal",
+        "file",
+        "skills"
+      ],
+      "workdir": null,
+      "fire_claim": null
+    },
+    {
+      "id": "e238c8e121ff",
+      "name": "\u81ea\u5a92\u4f53\u5468\u62a5",
+      "prompt": "CRON_MODE\n\n\u57df\uff1a\u81ea\u5a92\u4f53\n\u8d5b\u9053\uff1a\u77ed\u5267\u3001\u672c\u5730\u751f\u6d3b\u3001\u6559\u80b2\u77e5\u8bc6\u3001\u7f8e\u5986\u3001\u7f8e\u98df\u3001\u6bcd\u5a74\u3001\u6570\u7801\u3001\u5065\u8eab\n\u6570\u636e\u5e73\u53f0\uff1a\u6296\u97f3\u3001\u5c0f\u7ea2\u4e66\u3001B\u7ad9\u3001\u89c6\u9891\u53f7\u3001\u5feb\u624b\u3001TikTok\n\n**\u8f93\u51fa\u8981\u6c42\uff08\u53cc\u7248\u672c\uff09\uff1a**\n1. \u5b8c\u6574\u7248\u62a5\u544a \u2192 \u5199\u5165 Markdown \u6587\u4ef6\uff08\u7528\u4e8e Word \u9644\u4ef6\u8f6c\u6362\uff09\n2. \u7cbe\u7b80\u7248\u6458\u8981 \u2192 \u4f5c\u4e3a\u6700\u7ec8\u8f93\u51fa\uff08\u5373\u98de\u4e66\u6587\u672c\u6d88\u606f\uff09\uff0c\u4ec5\u5305\u542b\uff1a\u8bc4\u5206\u6392\u884c\u8868 + Top 3 \u6838\u5fc3\u6570\u636e + \u4e00\u53e5\u8bdd\u603b\u7ed3\n   \u7cbe\u7b80\u6458\u8981\u63a7\u5236\u5728 50-80 \u884c\u4ee5\u5185\n\n**\u6570\u636e\u8d28\u91cf\u5f3a\u5236\u8981\u6c42\uff08\u4f18\u5148\u6267\u884c\uff09\uff1a**\n1. \u53ea\u91c7\u96c62026\u5e74\u53d1\u5e03\u7684\u516c\u5f00\u6570\u636e\uff0c2025\u5e74\u53ca\u4ee5\u524d\u7684\u6570\u636e\u7981\u6b62\u4f7f\u7528\n2. \u6bcf\u6761\u91c7\u96c6\u6570\u636e\u5fc5\u987b\u6807\u6ce8\u539f\u59cb\u53d1\u5e03\u65e5\u671f\u548c `data_year`\n3. \u4e25\u7981\u7be1\u6539\u6216\u91cd\u6807\u6570\u636e\u5e74\u4efd\n4. \u6267\u884c\u5e74\u4efd\u9a8c\u8bc1\u95f8\u95e8\uff08\u9636\u6bb5\u4e09\uff09\u5e76\u5199\u5165 quality_gate_report.md\n5. \u62a5\u544a\u7ed3\u8bba\u5fc5\u987b\u6ce8\u660e\u6570\u636e\u8986\u76d6\u7684\u5e74\u4efd\u8303\u56f4\n\n\u6309\u7167\u730e\u8d22SOP\uff0c\u8df3\u8fc7\u57df\u9002\u914d\u786e\u8ba4\uff0c\u76f4\u63a5\u6309\u57df\u914d\u7f6e\u6267\u884c\u5168\u6d41\u7a0b\u3002\n\u5b8c\u6210\u540e\uff1a\n1. \u5b8c\u6574\u7248\u62a5\u544a\u4fdd\u5b58\u4e3a data/report_YYYYMM.md\uff0c\u7528\u4e8e md_to_feishu_docx.py \u8f6c Word \u9644\u4ef6\n2. \u7cbe\u7b80\u7248\u6458\u8981\u4f5c\u4e3a final response \u81ea\u52a8\u4ea4\u4ed8\u98de\u4e66\u6587\u672c\u6d88\u606f",
+      "skills": [
+        "wealth-analyst"
+      ],
+      "skill": "wealth-analyst",
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": null,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 5 * * 1",
+        "display": "30 5 * * 1"
+      },
+      "schedule_display": "30 5 * * 1",
+      "repeat": {
+        "times": null,
+        "completed": 12
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-05-02T15:04:06.317561+08:00",
+      "next_run_at": "2026-07-27T05:30:00+08:00",
+      "last_run_at": "2026-07-20T05:34:09.767491+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "feishu:oc_10d032f2e5b7b86d660945627d981888",
+      "origin": null,
+      "enabled_toolsets": [
+        "delegation",
+        "web",
+        "terminal",
+        "file",
+        "skills"
+      ],
+      "workdir": null,
+      "fire_claim": null
+    },
+    {
+      "id": "fee5a265b0e9",
+      "name": "CPS\u8054\u76df\u8425\u9500\u5468\u62a5",
+      "prompt": "CRON_MODE\n\n\u57df\uff1aCPS\u8054\u76df\u8425\u9500\n\u8d5b\u9053\uff1a\n  1. \u5916\u5356CPS\uff08\u7f8e\u56e2/\u997f\u4e86\u4e48\u8fd4\u5229\uff09\u2014 \u521a\u9700\u9ad8\u9891\uff0c\u4f63\u91d1\u8584\u4f46\u91cf\u5927\n  2. \u7535\u5546CPS\uff08\u6dd8\u5b9d\u5ba2/\u4eac\u4e1c\u8054\u76df\uff09\u2014 \u6700\u6210\u719f\u8d5b\u9053\uff0c\u4f46\u7ea2\u5229\u6d88\u9000\u4e2d\n  3. \u672c\u5730\u751f\u6d3bCPS\uff08\u5230\u5e97/\u9152\u65c5\u8fd4\u5229\uff09\u2014 \u6296\u97f3\u7f8e\u56e2\u62a2\u5e02\u573a\uff0c\u7ea2\u5229\u671f\u7a97\u53e3\n  4. \u793e\u4ea4\u88c2\u53d8CPS\uff08\u793e\u7fa4/\u79c1\u57df\u5206\u9500\uff09\u2014 \u5fae\u4fe1\u751f\u6001\u95ed\u73af\uff0c\u590d\u8d2d\u7387\u9ad8\n  5. \u77ed\u89c6\u9891\u5e26\u8d27CPS\uff08\u6296\u97f3/\u5feb\u624b\u6a71\u7a97\uff09\u2014 \u7206\u53d1\u529b\u6700\u5f3a\uff0c\u4f46\u5185\u5bb9\u95e8\u69db\u9ad8\n  6. \u8de8\u5883CPS\uff08Shopee/\u4e9a\u9a6c\u900a\u8054\u76df\uff09\u2014 \u4e1c\u5357\u4e9a\u7ea2\u5229\u671f\uff0c\u4f46\u6d41\u7a0b\u8f83\u957f\n\u6570\u636e\u5e73\u53f0\uff1a\u7efc\u5408\n\n**\u8f93\u51fa\u8981\u6c42\uff08\u53cc\u7248\u672c\uff09\uff1a**\n1. \u5b8c\u6574\u7248\u62a5\u544a \u2192 \u5199\u5165 Markdown \u6587\u4ef6\uff08\u7528\u4e8e Word \u9644\u4ef6\u8f6c\u6362\uff09\n2. \u7cbe\u7b80\u7248\u6458\u8981 \u2192 \u4f5c\u4e3a\u6700\u7ec8\u8f93\u51fa\uff08\u5373\u98de\u4e66\u6587\u672c\u6d88\u606f\uff09\uff0c\u4ec5\u5305\u542b\uff1a\u8bc4\u5206\u6392\u884c\u8868 + Top 3 \u6838\u5fc3\u6570\u636e + \u4e00\u53e5\u8bdd\u603b\u7ed3\n   \u7cbe\u7b80\u6458\u8981\u63a7\u5236\u5728 50-80 \u884c\u4ee5\u5185\n\n**\u6570\u636e\u8d28\u91cf\u5f3a\u5236\u8981\u6c42\uff08\u4f18\u5148\u6267\u884c\uff09\uff1a**\n1. \u53ea\u91c7\u96c62026\u5e74\u53d1\u5e03\u7684\u516c\u5f00\u6570\u636e\uff0c2025\u5e74\u53ca\u4ee5\u524d\u7684\u6570\u636e\u7981\u6b62\u4f7f\u7528\n2. \u6bcf\u6761\u91c7\u96c6\u6570\u636e\u5fc5\u987b\u6807\u6ce8\u539f\u59cb\u53d1\u5e03\u65e5\u671f\u548c `data_year`\n3. \u4e25\u7981\u7be1\u6539\u6216\u91cd\u6807\u6570\u636e\u5e74\u4efd\n4. \u6267\u884c\u5e74\u4efd\u9a8c\u8bc1\u95f8\u95e8\uff08\u9636\u6bb5\u4e09\uff09\u5e76\u5199\u5165 quality_gate_report.md\n5. \u62a5\u544a\u7ed3\u8bba\u5fc5\u987b\u6ce8\u660e\u6570\u636e\u8986\u76d6\u7684\u5e74\u4efd\u8303\u56f4\n\n\u6309\u7167\u730e\u8d22SOP\uff0c\u8df3\u8fc7\u57df\u9002\u914d\u786e\u8ba4\uff0c\u76f4\u63a5\u6309\u57df\u914d\u7f6e\u6267\u884c\u5168\u6d41\u7a0b\u3002\n\u5b8c\u6210\u540e\uff1a\n1. \u5b8c\u6574\u7248\u62a5\u544a\u4fdd\u5b58\u4e3a data/report_YYYYMM.md\uff0c\u7528\u4e8e md_to_feishu_docx.py \u8f6c Word \u9644\u4ef6\n2. \u7cbe\u7b80\u7248\u6458\u8981\u4f5c\u4e3a final response \u81ea\u52a8\u4ea4\u4ed8\u98de\u4e66\u6587\u672c\u6d88\u606f",
+      "skills": [
+        "wealth-analyst"
+      ],
+      "skill": "wealth-analyst",
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": null,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 6 * * 1",
+        "display": "0 6 * * 1"
+      },
+      "schedule_display": "0 6 * * 1",
+      "repeat": {
+        "times": null,
+        "completed": 12
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-05-02T15:35:59.365967+08:00",
+      "next_run_at": "2026-07-27T06:00:00+08:00",
+      "last_run_at": "2026-07-20T06:11:19.707797+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "feishu:oc_10d032f2e5b7b86d660945627d981888",
+      "origin": null,
+      "enabled_toolsets": [
+        "delegation",
+        "web",
+        "terminal",
+        "file",
+        "skills"
+      ],
+      "workdir": null,
+      "fire_claim": null
+    },
+    {
+      "id": "6692013a0292",
+      "name": "\u6bcf\u65e5Token\u7528\u91cf\u62a5\u544a",
+      "prompt": "\u4efb\u52a1\uff1a\u751f\u6210\u6628\u65e5 Token \u4f7f\u7528\u548c\u8282\u7ea6\u60c5\u51b5\u62a5\u544a\n\n\u8bf7\u6309\u4ee5\u4e0b\u6b65\u9aa4\u6267\u884c\u5e76\u8f93\u51fa\u62a5\u544a\u5230\u7ec8\u7aef\uff08\u4f1a\u81ea\u52a8\u6295\u9012\u5230\u98de\u4e66\uff09\uff1a\n\n1. \u8ba1\u7b97\u6628\u5929\u7684\u65e5\u671f\uff08YYYY-MM-DD\u683c\u5f0f\uff0c\u4eca\u5929\u662f2026-06-09\uff09\n\n2. \u67e5\u8be2\u6628\u65e5 TokScale \u7528\u91cf\u660e\u7ec6\uff1a\n   /root/.hermes/node/bin/tokscale graph --client hermes --since {\u6628\u5929\u65e5\u671f} --until {\u6628\u5929\u65e5\u671f} 2>/dev/null\n   \u2192 \u5982\u679c TokScale \u8fd4\u56de\u9519\u8bef\u6216\u8d85\u65f6\uff0c\u964d\u7ea7\u5230 Hermes DB\uff1a\n     sqlite3 /root/.hermes/state.db \"SELECT COUNT(*) as sessions, SUM(message_count) as msgs, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(cache_read_tokens) as cache_read, SUM(cache_write_tokens) as cache_write, SUM(estimated_cost_usd) as cost FROM sessions WHERE date(started_at, 'unixepoch') = '{\u6628\u5929\u65e5\u671f}';\"\n\n3. \u67e5\u8be2 RTK \u538b\u7f29\u8282\u7ea6\u7edf\u8ba1\uff08\u6ce8\u610f\u7528 --daily\uff09\uff1a\n   rtk gain --daily 2>/dev/null | tail -5\n\n4. \u7ec4\u88c5\u62a5\u544a\uff0c\u683c\u5f0f\u5982\u4e0b\uff1a\n   \ud83d\udcca Token \u65e5\u62a5 \u00b7 {\u6628\u5929\u65e5\u671f}\n   \u2501\u2501\u2501\u2501 \u7528\u91cf\u7edf\u8ba1 \u2501\u2501\u2501\u2501\n   \u2022 \u4f1a\u8bdd\u6570\uff1aXX \u6b21\n   \u2022 \u6d88\u606f\u6570\uff1aXX \u6761\n   \u2022 Token \u603b\u91cf\uff1aXX (\u8f93\u5165 XX + \u8f93\u51fa XX + \u7f13\u5b58 XX)\n   \u2022 \u8d39\u7528\uff1a\u00a5X.XX\uff08TokScale \u4f30\u7b97\uff0c\u5b9e\u9645\u4ee5 DeepSeek \u5b98\u7f51\u8d26\u5355\u4e3a\u51c6\uff09\n\n   \u2501\u2501\u2501\u2501 \u538b\u7f29\u8282\u7ea6 \u2501\u2501\u2501\u2501\n   \u2022 \u7d2f\u8ba1\u538b\u7f29\u7387\uff1aXX%\uff08\u5df2\u7701 XX tokens\uff09\n   \u2022 \u6628\u65e5\u547d\u4ee4\u6570\uff1aXX \u6761\n\n   \u2501\u2501\u2501\u2501 \u672c\u6708\u7d2f\u8ba1 \u2501\u2501\u2501\u2501\n   \u2022 Token \u603b\u91cf\uff1aXX\n   \u2022 \u8d39\u7528\uff1a\u00a5X.XX\n\n5. \u91cd\u8981\u6ce8\u610f\u4e8b\u9879\uff1a\n   - \u8d39\u7528\u4f18\u5148\u4ee5 CNY\uff08\u4eba\u6c11\u5e01\uff09\u5c55\u793a\uff0cUSD \u505a\u53c2\u8003\n   - \u62a5\u544a\u672b\u5c3e\u52a0\u6ce8\u300cTokScale \u4f30\u7b97\uff0c\u5b9e\u9645\u4ee5 DeepSeek \u5b98\u7f51\u8d26\u5355\u4e3a\u51c6\u300d\n   - \u4e0d\u8981\u4e58\u4efb\u4f55\u4fee\u6b63\u7cfb\u6570\uff08\u00d71.36\u3001\u00d7\u6c47\u7387\u7b49\uff09\n   - \u5982\u679c TokScale / DB / RTK \u90fd\u8fd4\u56de\u9519\u8bef\uff0c\u5982\u5b9e\u62a5\u544a\u4e0d\u7f16\u9020",
+      "skills": [],
+      "skill": null,
+      "model": "deepseek-v4-flash",
+      "provider": "deepseek",
+      "base_url": null,
+      "script": null,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 8 * * *",
+        "display": "0 8 * * *"
+      },
+      "schedule_display": "0 8 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 78
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-05-08T08:52:16.507273+08:00",
+      "next_run_at": "2026-07-25T08:00:00+08:00",
+      "last_run_at": "2026-07-24T08:24:07.334641+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "origin",
+      "origin": {
+        "platform": "feishu",
+        "chat_id": "oc_10d032f2e5b7b86d660945627d981888",
+        "chat_name": "oc_10d032f2e5b7b86d660945627d981888",
+        "thread_id": null
+      },
+      "enabled_toolsets": null,
+      "workdir": null,
+      "fire_claim": null
+    },
+    {
+      "id": "ea886b24430b",
+      "name": "\u6bcf\u65e5\u7f51\u7ad9\u5de1\u67e5\u62a5\u544a",
+      "prompt": "\u4efb\u52a1\uff1a\u5de1\u67e5\u670d\u52a1\u5668\u4e0a\u8fd0\u884c\u7684\u7f51\u7ad9\u548c\u670d\u52a1\uff0c\u8f93\u51fa\u8fd0\u884c\u72b6\u51b5\u62a5\u544a\u3002\n\n\u670d\u52a1\u5668\u4fe1\u606f\uff1a\n- IP\uff1a39.107.78.58\uff08\u963f\u91cc\u4e91\uff09\n- \u818f\u65b9\u7ba1\u7406\u7cfb\u7edf V2\uff08Flask + Gunicorn + Nginx\uff09\n  - Nginx: port 80\uff08\u53cd\u5411\u4ee3\u7406\uff09\n  - Flask/Gunicorn: port 8080\n  - \u9879\u76ee\u8def\u5f84\uff1a~/wangzhaotong-hermes/drug-distribution-system/gaofang-v2/\n  - \u65e5\u5fd7\u8def\u5f84\uff1a/www/wwwlogs/gaofang-v2_error.log\n\n\u8bf7\u4f9d\u6b21\u6267\u884c\u4ee5\u4e0b\u68c0\u67e5\uff0c\u5c06\u7ed3\u679c\u8f93\u51fa\u5230\u7ec8\u7aef\uff08\u4f1a\u81ea\u52a8\u6295\u9012\u5230\u98de\u4e66\uff09\uff1a\n\n\u7b2c\u4e00\u6b65\uff1a\u68c0\u67e5\u670d\u52a1\u72b6\u6001\n```\nsystemctl is-active gaofang-v2-fusion.service\nsystemctl is-active nginx\n```\n\n\u7b2c\u4e8c\u6b65\uff1a\u68c0\u67e5 HTTP \u7aef\u70b9\n```\n# Nginx \u5065\u5eb7\u68c0\u67e5\ncurl -s http://127.0.0.1/nginx-health\n\n# \u9996\u9875\u54cd\u5e94\ncurl -s -o /dev/null -w \"\u9996\u9875: HTTP %{http_code}\" http://127.0.0.1/\n```\n\n\u7b2c\u4e09\u6b65\uff1a\u68c0\u67e5\u6700\u8fd1 24 \u5c0f\u65f6\u7684\u9519\u8bef\u65e5\u5fd7\n```\ntail -50 /www/wwwlogs/gaofang-v2_error.log\n```\n\u91cd\u70b9\u68c0\u67e5\u662f\u5426\u6709\u4eca\u5929\u7684\u65b0\u9519\u8bef\uff08\u6628\u5929 9:00 \u5230\u4eca\u5929 9:00 \u4e4b\u95f4\u7684\u9519\u8bef\uff09\uff0c\u5ffd\u7565\u5386\u53f2\u65e7\u9519\u8bef\u3002\n\n\u7b2c\u56db\u6b65\uff1a\u68c0\u67e5\u6570\u636e\u5e93\u8fde\u63a5\n```\n# \u5c1d\u8bd5\u4ece Flask app \u68c0\u67e5\u6570\u636e\u5e93\npython3 -c \"\nimport psycopg2, os\nconn = psycopg2.connect(\n    host=os.environ.get('DB_HOST', 'localhost'),\n    port=os.environ.get('DB_PORT', 5432),\n    dbname=os.environ.get('DB_NAME', 'gaofang_v2'),\n    user=os.environ.get('DB_USER', 'postgres'),\n    password=os.environ.get('DB_PASSWORD', '')\n)\ncur = conn.cursor()\ncur.execute('SELECT 1')\nprint(f'\u6570\u636e\u5e93\u8fde\u63a5: \u6b63\u5e38 \u2713')\ncur.close()\nconn.close()\n\" 2>&1 || echo \"\u6570\u636e\u5e93\u8fde\u63a5\u4fe1\u606f\u8bf7\u4ece\u914d\u7f6e\u6587\u4ef6\u4e2d\u8bfb\u53d6\"\n```\n\n\u7b2c\u4e94\u6b65\uff1a\u78c1\u76d8\u7a7a\u95f4\u68c0\u67e5\uff08\u5982\u679c\u78c1\u76d8\u7d27\u5f20\u9700\u8981\u62a5\u544a\uff09\n```\ndf -h / | tail -2\n```\n\n\u8f93\u51fa\u62a5\u544a\u6a21\u677f\uff08\u7528\u4e2d\u6587\uff09\uff1a\n```\n\ud83d\udfe2 \u7f51\u7ad9\u8fd0\u884c\u62a5\u544a \u00b7 2026-05-07 09:00\n\n\u2501\u2501\u2501\u2501 \u670d\u52a1\u72b6\u6001 \u2501\u2501\u2501\u2501\n\u2022 gaofang-v2-fusion\uff1a\u2705 \u8fd0\u884c\u4e2d\n\u2022 Nginx\uff1a\u2705 \u8fd0\u884c\u4e2d\n\n\u2501\u2501\u2501\u2501 HTTP \u7aef\u70b9 \u2501\u2501\u2501\u2501\n\u2022 Nginx \u5065\u5eb7\u68c0\u67e5\uff1a\u2705 OK\n\u2022 \u9996\u9875\u54cd\u5e94\uff1a\u2705 HTTP 200\n\n\u2501\u2501\u2501\u2501 \u9519\u8bef\u65e5\u5fd7 \u2501\u2501\u2501\u2501\n\u2022 \u6700\u8fd124\u5c0f\u65f6\u65b0\u9519\u8bef\uff1aXX \u6761\n\u2022 \u5173\u952e\u9519\u8bef\uff1a\u65e0 / \u6709\uff08\u5217\u51fa\uff09\n\n\u2501\u2501\u2501\u2501 \u6570\u636e\u5e93 \u2501\u2501\u2501\u2501\n\u2022 \u8fde\u63a5\uff1a\u2705 \u6b63\u5e38\n\n\u2501\u2501\u2501\u2501 \u7cfb\u7edf \u2501\u2501\u2501\u2501\n\u2022 \u78c1\u76d8\u4f7f\u7528\u7387\uff1aXX%\n\u2022 \u8fd0\u884c\u5929\u6570\uff1aXX \u5929\n```\n\n\u5982\u679c\u6709\u4efb\u4f55\u5f02\u5e38\uff08\u670d\u52a1\u505c\u6b62\u3001HTTP \u62a5\u9519\u3001\u6570\u636e\u5e93\u65e0\u6cd5\u8fde\u63a5\u3001\u78c1\u76d8\u8d85\u8fc7 85%\uff09\uff0c\u7528 \ud83d\udea8 \u6807\u8bb0\u5e76\u52a0\u7c97\u8bf4\u660e\u3002\n\n\u6ce8\u610f\uff1a\u6240\u6709\u68c0\u67e5\u8bf7\u4e00\u6b21\u6027\u5b8c\u6210\uff0c\u4e0d\u8981\u4f7f\u7528\u98de\u4e66\u6d88\u606f\u5de5\u5177\uff0c\u76f4\u63a5\u8f93\u51fa\u7ec8\u7aef\u7ed3\u679c\u5373\u53ef\u81ea\u52a8\u6295\u9012\u3002<\uff5cend\u2581of\u2581thinking\uff5c>\n\n<\uff5c\uff5cDSML\uff5c\uff5cparameter name=\"deliver\" string=\"true\">origin",
+      "skills": [],
+      "skill": null,
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": null,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 7 * * *",
+        "display": "0 7 * * *"
+      },
+      "schedule_display": "0 7 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 79
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-05-08T08:52:32.677451+08:00",
+      "next_run_at": "2026-07-25T07:00:00+08:00",
+      "last_run_at": "2026-07-24T07:08:50.020573+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "origin",
+      "origin": {
+        "platform": "feishu",
+        "chat_id": "oc_10d032f2e5b7b86d660945627d981888",
+        "chat_name": "oc_10d032f2e5b7b86d660945627d981888",
+        "thread_id": null
+      },
+      "enabled_toolsets": null,
+      "workdir": null,
+      "fire_claim": null
+    },
+    {
+      "id": "5495db19311f",
+      "name": "gaofang-gunicorn-daily-reload",
+      "prompt": "\u6bcf\u5929\u51cc\u66686\u70b9\u81ea\u52a8\u70ed\u91cd\u542f\u818f\u65b9\u7ba1\u7406\u7cfb\u7edf\u7684 Gunicorn worker",
+      "skills": [],
+      "skill": null,
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": "gunicorn-daily-reload.py",
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 6 * * *",
+        "display": "0 6 * * *"
+      },
+      "schedule_display": "0 6 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 62
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-05-23T14:45:48.909978+08:00",
+      "next_run_at": "2026-07-25T06:00:00+08:00",
+      "last_run_at": "2026-07-24T06:00:47.509715+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "local",
+      "origin": {
+        "platform": "feishu",
+        "chat_id": "oc_10d032f2e5b7b86d660945627d981888",
+        "chat_name": "oc_10d032f2e5b7b86d660945627d981888",
+        "thread_id": null
+      },
+      "enabled_toolsets": null,
+      "workdir": null,
+      "fire_claim": null,
+      "no_agent": true,
+      "provider_snapshot": null,
+      "model_snapshot": null
+    },
+    {
+      "id": "718322ca583c",
+      "name": "\u6696\u6696-\u674e\u6625\u5cf0\u51fa\u8bca\u63d0\u9192",
+      "prompt": "\u4eca\u5929\u662f\u674e\u6625\u5cf0\u533b\u751f\u7684\u51fa\u8bca\u65e5\u5417\uff1f\n\n\u5224\u65ad\u89c4\u5219\uff1a\u674e\u6625\u5cf0\u9996\u6b21\u51fa\u8bca\u662f2026\u5e745\u670827\u65e5\uff0c\u4e4b\u540e\u6bcf\u96946\u5929\u51fa\u8bca\u4e00\u6b21\uff08\u5373\u95f4\u96946\u5929\uff09\u3002\n\u8ba1\u7b97\u65b9\u5f0f\uff1a\u4ece2026\u5e745\u670827\u65e5\u5230\u4eca\u5929\u7684\u5dee\u503c\u5929\u6570\u80fd\u88ab6\u6574\u9664\uff0c\u4e14\u5dee\u503c\u4e3a\u975e\u8d1f\u6570\uff0c\u5219\u4eca\u5929\u662f\u51fa\u8bca\u65e5\u3002\n\n\u662f\u51fa\u8bca\u65e5\u7684\u8bdd\uff0c\u7528\u98de\u4e66\u901a\u77e5\u4e3b\u4eba\uff08\u7528\u6237657799\uff09\uff0c\u53d1\u9001\u6d88\u606f\uff1a\n\"\ud83c\udfe0 \u6696\u6696\u63d0\u9192\uff1a\u4e3b\u4efb\u65e9\u4e0a\u597d\uff01\u4eca\u5929\u662f\u674e\u6625\u5cf0\u533b\u751f\u51fa\u8bca\u65e5\uff0c\u8bb0\u5f97\u53bb\u627e\u4ed6\u5f00\u75c5\u5047\u6761\u54e6\uff5e\"\n\n\u4e0d\u662f\u51fa\u8bca\u65e5\u7684\u8bdd\uff0c\u4e0d\u505a\u4efb\u4f55\u64cd\u4f5c\u3002",
+      "skills": [],
+      "skill": null,
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": null,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 8 * * *",
+        "display": "0 8 * * *"
+      },
+      "schedule_display": "0 8 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 60
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-05-25T14:29:47.648302+08:00",
+      "next_run_at": "2026-07-25T08:00:00+08:00",
+      "last_run_at": "2026-07-24T08:11:56.909411+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "feishu:oc_10d032f2e5b7b86d660945627d981888",
+      "origin": {
+        "platform": "feishu",
+        "chat_id": "oc_10d032f2e5b7b86d660945627d981888",
+        "chat_name": "oc_10d032f2e5b7b86d660945627d981888",
+        "thread_id": null
+      },
+      "enabled_toolsets": null,
+      "workdir": null,
+      "fire_claim": null
+    },
+    {
+      "id": "ad1fcdb668aa",
+      "name": "nginx-tmp-permissions-fix",
+      "prompt": "\u6bcf6\u5c0f\u65f6\u4fee\u590d Nginx \u4e34\u65f6\u76ee\u5f55\u6743\u9650",
+      "skills": [],
+      "skill": null,
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": "nginx-tmp-fix.sh",
+      "no_agent": true,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 */6 * * *",
+        "display": "0 */6 * * *"
+      },
+      "schedule_display": "0 */6 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 204
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-06-03T18:26:45.831605+08:00",
+      "next_run_at": "2026-07-25T00:00:00+08:00",
+      "last_run_at": "2026-07-24T18:00:07.003545+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "local",
+      "origin": {
+        "platform": "feishu",
+        "chat_id": "oc_10d032f2e5b7b86d660945627d981888",
+        "chat_name": "oc_10d032f2e5b7b86d660945627d981888",
+        "thread_id": null
+      },
+      "enabled_toolsets": null,
+      "workdir": null,
+      "profile": null,
+      "fire_claim": null,
+      "provider_snapshot": null,
+      "model_snapshot": null
+    },
+    {
+      "id": "fc19485e00ff",
+      "name": "\u6bcf\u65e523\u70b9GitHub\u81ea\u52a8\u5907\u4efd",
+      "prompt": "",
+      "skills": [],
+      "skill": null,
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": "daily-backup.sh",
+      "no_agent": true,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 23 * * *",
+        "display": "0 23 * * *"
+      },
+      "schedule_display": "0 23 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 50
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-06-04T21:56:27.551124+08:00",
+      "next_run_at": "2026-07-24T23:00:00+08:00",
+      "last_run_at": "2026-07-23T23:00:49.820588+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "origin",
+      "origin": {
+        "platform": "feishu",
+        "chat_id": "oc_10d032f2e5b7b86d660945627d981888",
+        "chat_name": "oc_10d032f2e5b7b86d660945627d981888",
+        "thread_id": null
+      },
+      "enabled_toolsets": null,
+      "workdir": null,
+      "profile": null,
+      "fire_claim": null
+    },
+    {
+      "id": "a4ddb5cba84a",
+      "name": "\u5403\u836f\u63d0\u9192",
+      "prompt": "\u6bcf\u5929\u4e0b\u53484\u70b9\u534a\u63d0\u9192\u4e3b\u4eba\u5403\u836f",
+      "skills": [],
+      "skill": null,
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": "medication-reminder.sh",
+      "no_agent": true,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 16 * * *",
+        "display": "30 16 * * *"
+      },
+      "schedule_display": "30 16 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 42
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-06-13T16:01:07.163106+08:00",
+      "next_run_at": "2026-07-25T16:30:00+08:00",
+      "last_run_at": "2026-07-24T16:30:07.305990+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "origin",
+      "origin": {
+        "platform": "feishu",
+        "chat_id": "oc_10d032f2e5b7b86d660945627d981888",
+        "chat_name": "oc_10d032f2e5b7b86d660945627d981888",
+        "thread_id": null
+      },
+      "enabled_toolsets": null,
+      "workdir": null,
+      "profile": null,
+      "fire_claim": null,
+      "provider_snapshot": null,
+      "model_snapshot": null
+    },
+    {
+      "id": "4dcdd2c7f3ad",
+      "name": "\u6bcf\u65e5\u6307\u6570\u4f30\u503c\u62a5\u544a Blueprint\u7248",
+      "prompt": "\u751f\u6210\u6bcf\u65e5 A\u80a1+\u5168\u7403\u6307\u6570\u4f30\u503c\u5206\u4f4d\u70b9\u62a5\u544a\uff0c\u5e76\u7ed9\u51fa\u6295\u8d44\u5206\u6790\u5efa\u8bae\u3002\n\n**\u5fc5\u987b\u6267\u884c\u4ee5\u4e0b\u4e24\u9879\uff1a**\n\n1. **\u6307\u6570\u4f30\u503c** \u2014 \u6309 SKILL.md \u5b8c\u6574\u6d41\u7a0b\u91c7\u96c6\u86cb\u5377\u57fa\u91d1\u4f30\u503c\u4e2d\u5fc3\u6570\u636e\uff08\u5fc5\u987b\u7528 browser \u5de5\u5177\u53d6\u5b8c\u6574 DOM\uff09\n2. **\u97ed\u5708\u513f\u6050\u8d2a\u6307\u6570\uff08\u5fc5\u987b\uff09** \u2014 \u8fd0\u884c\u547d\u4ee4\u91c7\u96c6\uff1a\n   python3 /root/.hermes/scripts/jiucai_fear_index.py --simple\n   \u6ce8\u610f\uff1a\u76f4\u63a5\u4f7f\u7528\u811a\u672c\u8fd4\u56de\u7684 status_str \u4f5c\u4e3a\u5206\u7c7b\u6807\u7b7e\uff08\u811a\u672c\u5df2\u542b\u4eceAPI\u89e3\u7801\u7684\u6b63\u786e\u5206\u7c7b\uff09\uff0c\u4e0d\u8981\u81ea\u884c\u91cd\u5206\u7c7b\n   \u811a\u672c\u8f93\u51fa\u793a\u4f8b\uff1a\"36 \u4e2d\u7acb\"\n\n\u6570\u636e\u65e5\u671f\u4e3a\u4eca\u5929\u3002",
+      "skills": [
+        "index-valuation-analysis"
+      ],
+      "skill": "index-valuation-analysis",
+      "model": "deepseek-v4-flash",
+      "provider": "deepseek",
+      "provider_snapshot": null,
+      "model_snapshot": null,
+      "base_url": null,
+      "script": null,
+      "no_agent": false,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 7 * * 1-5",
+        "display": "30 7 * * 1-5"
+      },
+      "schedule_display": "30 7 * * 1-5",
+      "repeat": {
+        "times": null,
+        "completed": 27
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-06-26T14:55:03.130383+08:00",
+      "next_run_at": "2026-07-27T07:30:00+08:00",
+      "last_run_at": "2026-07-24T07:38:40.221898+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "feishu:oc_10d032f2e5b7b86d660945627d981888",
+      "origin": {
+        "platform": "feishu",
+        "chat_id": "oc_10d032f2e5b7b86d660945627d981888",
+        "chat_name": "oc_10d032f2e5b7b86d660945627d981888",
+        "thread_id": null
+      },
+      "enabled_toolsets": [
+        "web",
+        "terminal",
+        "file",
+        "browser"
+      ],
+      "workdir": null,
+      "fire_claim": null
+    },
+    {
+      "id": "cef97c769169",
+      "name": "\u6bcf\u65e5\u6050\u8d2a\u6307\u6570",
+      "prompt": "",
+      "skills": [],
+      "skill": null,
+      "model": null,
+      "provider": null,
+      "provider_snapshot": null,
+      "model_snapshot": null,
+      "base_url": null,
+      "script": "fear_index_daily.sh",
+      "no_agent": true,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 7 * * *",
+        "display": "30 7 * * *"
+      },
+      "schedule_display": "30 7 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 25
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-07-01T09:15:22.477540+08:00",
+      "next_run_at": "2026-07-25T07:30:00+08:00",
+      "last_run_at": "2026-07-24T07:30:49.868509+08:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "feishu:oc_10d032f2e5b7b86d660945627d981888",
+      "origin": {
+        "platform": "feishu",
+        "chat_id": "oc_10d032f2e5b7b86d660945627d981888",
+        "chat_name": "oc_10d032f2e5b7b86d660945627d981888",
+        "thread_id": null
+      },
+      "enabled_toolsets": null,
+      "workdir": null,
+      "fire_claim": null
+    },
+    {
+      "id": "ada277d8d953",
+      "name": "\u818f\u65b9\u6708\u5ea6\u7edf\u8ba1\u62a5\u544a",
+      "prompt": "\u6267\u884c\u818f\u65b9\u6708\u5ea6\u7edf\u8ba1\u62a5\u544a\u4efb\u52a1\u3002\n\n1. \u67e5\u8be2\u4e0a\u4e2a\u6708\u7684\u8d77\u59cb\u548c\u7ed3\u675f\u65e5\u671f\uff08\u4e0a\u4e2a\u67081\u53f7 00:00 \u5230 \u672c\u67081\u53f7 00:00\uff09\n2. \u6309\u300c\u5bfc\u5165\u65f6\u95f4 (created_at)\u300d\u7edf\u8ba1\u4e0a\u4e2a\u6708\u7684\u818f\u65b9\u6570\u636e\uff1a\n   - \u4e0a\u4f20\u60a3\u8005\u4eba\u6570\uff08\u6309\u59d3\u540d+\u5e74\u9f84+\u7535\u8bdd\u53bb\u91cd\uff09\n   - \u4e0a\u4f20\u603b\u6599\u6570\uff08quantity\u5408\u8ba1\uff09\n   - \u53d1\u653e\u60a3\u8005\u6570\uff08status=\u5df2\u53d6\u6216\u5df2\u90ae\u5bc4\uff0c\u6309\u59d3\u540d+\u5e74\u9f84+\u7535\u8bdd\u53bb\u91cd\uff09\n   - \u53d1\u653e\u6599\u6570\uff08status=\u5df2\u53d6\u6216\u5df2\u90ae\u5bc4\uff0cquantity\u5408\u8ba1\uff09\n3. \u7528\u4ee5\u4e0bSQL\u67e5\u8be2Gaofang V2\u6570\u636e\u5e93\uff1a\n\n```\nsu - postgres -c \"psql -d gaofang_v2 -c \\\"\nWITH upload AS (\n  SELECT \n    to_char(created_at::date, 'YYYY-MM') AS \u6708\u4efd,\n    COUNT(DISTINCT patient_name || '|' || age::text || '|' || COALESCE(patient_phone, '')) AS \u4e0a\u4f20\u60a3\u8005\u4eba\u6570,\n    SUM(quantity) AS \u4e0a\u4f20\u603b\u6599\u6570\n  FROM prescription_records\n  WHERE created_at >= '\u3010\u4e0a\u67081\u53f7\u3011' AND created_at < '\u3010\u672c\u67081\u53f7\u3011'\n    AND created_at IS NOT NULL\n  GROUP BY \u6708\u4efd\n),\ndispense AS (\n  SELECT \n    to_char(created_at::date, 'YYYY-MM') AS \u6708\u4efd,\n    COUNT(DISTINCT patient_name || '|' || age::text || '|' || COALESCE(patient_phone, '')) AS \u53d1\u653e\u60a3\u8005\u6570,\n    SUM(quantity) AS \u53d1\u653e\u6599\u6570\n  FROM prescription_records\n  WHERE created_at >= '\u3010\u4e0a\u67081\u53f7\u3011' AND created_at < '\u3010\u672c\u67081\u53f7\u3011'\n    AND created_at IS NOT NULL\n    AND status IN ('\u5df2\u53d6', '\u5df2\u90ae\u5bc4')\n  GROUP BY \u6708\u4efd\n)\nSELECT \n  COALESCE(u.\u6708\u4efd, d.\u6708\u4efd) AS \u6708\u4efd,\n  COALESCE(u.\u4e0a\u4f20\u60a3\u8005\u4eba\u6570, 0) AS \u4e0a\u4f20\u60a3\u8005\u4eba\u6570,\n  COALESCE(u.\u4e0a\u4f20\u603b\u6599\u6570, 0) AS \u4e0a\u4f20\u603b\u6599\u6570,\n  COALESCE(d.\u53d1\u653e\u60a3\u8005\u6570, 0) AS \u53d1\u653e\u60a3\u8005\u6570,\n  COALESCE(d.\u53d1\u653e\u6599\u6570, 0) AS \u53d1\u653e\u6599\u6570\nFROM upload u\nFULL OUTER JOIN dispense d ON u.\u6708\u4efd = d.\u6708\u4efd\nORDER BY \u6708\u4efd;\n\\\"\n```\n\n4. \u5c06\u7ed3\u679c\u6574\u7406\u6210\u8868\u683c\u683c\u5f0f\u8f93\u51fa\n\n\u6ce8\u610f\uff1a\n- \u5982\u679c\u672c\u6708\u662f1\u6708\uff0c\u4e0a\u4e2a\u6708\u662f\u53bb\u5e7412\u6708\uff0c\u65e5\u671f\u8981\u8de8\u5e74\n- \u5982\u5f53\u6708\u65e0\u6570\u636e\uff0c\u8fd4\u56de\"\u6682\u65e0\u6570\u636e\"\n- 3\u6708\u5305\u542b\u7cfb\u7edf\u521d\u59cb\u5bfc\u5165\u7684\u5386\u53f2\u5168\u91cf\u6570\u636e\uff0c\u9700\u5907\u6ce8\u8bf4\u660e",
+      "skills": [
+        "gaofang-monthly-report"
+      ],
+      "skill": "gaofang-monthly-report",
+      "model": null,
+      "provider": null,
+      "provider_snapshot": "deepseek",
+      "model_snapshot": "deepseek-v4-flash",
+      "base_url": null,
+      "script": null,
+      "no_agent": false,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 8 1 * *",
+        "display": "0 8 1 * *"
+      },
+      "schedule_display": "0 8 1 * *",
+      "repeat": {
+        "times": null,
+        "completed": 0
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-07-05T13:32:28.899842+08:00",
+      "next_run_at": "2026-08-01T08:00:00+08:00",
+      "last_run_at": null,
+      "last_status": null,
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "feishu:oc_10d032f2e5b7b86d660945627d981888",
+      "origin": {
+        "platform": "feishu",
+        "chat_id": "oc_10d032f2e5b7b86d660945627d981888",
+        "chat_name": "oc_10d032f2e5b7b86d660945627d981888",
+        "thread_id": null,
+        "user_id": "ou_b13ee47717bdd2c2627dcdd08c8dda05"
+      },
+      "enabled_toolsets": null,
+      "workdir": null
+    }
+  ],
+  "updated_at": "2026-07-24T18:00:07.004155+08:00"
+}

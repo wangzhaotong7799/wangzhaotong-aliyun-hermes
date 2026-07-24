@@ -50,3 +50,7 @@ User expects direct, on-topic answers. When they ask about a specific thing (e.g
 
 已注册Tushare Pro但尚未配置Token到.env（2026-07-03对话中提到）。
 已装股票分析技能：Daisy Financial Research（深度研究）+ Stocks（快速查价）。
+§
+有详细的 A 股基金投资组合，配置比例：大盘成长 23%（A500/沪深300/科创板50/创业板ETF）、中小成长 24%（中证500/中证1000ETF）、固收偏债类 30%（国开债ETF/南方宝元债券A）、大盘价值 23%（红利低波ETF/中证红利低波ETF/中证银行ETF）。常进行投资分析和持仓讨论。
+§
+沟通风格简洁直接，喜欢 agent 主动检查分析后再汇报，信任度高，指令简短（如"升级"、"修复一下"）
