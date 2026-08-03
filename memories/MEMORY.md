@@ -28,17 +28,13 @@ OpenViking v0.3.14已部署并运行中:127.0.0.1:1933,systemd已启。Embedding
 §
 DeepSeek v4 Flash定价($/M)：缓存命中0.0028,缓存未命中0.14,输出0.28。官网比TokScale多算~36% token。费用CNY=TokScale_USD×1.36×7.14。优先用CNY报告。
 §
-Gunicorn: --max-requests 1000 --jitter 100, 每日06:00 HUP热重启(cronjob+脚本)。CDN自托管/static/lib/ + Nginx直服+gzip。
-§
-搬砖大队全流程：编剧1200字铁律→画师通义万相768x1152→音频师情感edge-tts→导演多图切换+BGM 12首。主人说「等我通知再跑」。
+搬砖大队全流程：编剧1200字铁律→画师通义万相768x1152→音频师情感edge-tts→导演多图切换+BGM 12首。主人说「等我通知再跑」，不能擅自跑新任务。
 §
 系列名是「夜伴低语」（陪伴的伴）。封面：可灵AI背景+红色大字+白色撕裂边框+黑底。视频第一帧固定封面3秒，故事名用庞门正道标题体。
 §
 edge_tts情感：Communicate(text,voice,rate=,pitch=) 传原生参数。映射：平静(-15%,-3Hz),恐惧(-5%,+5Hz),愤怒(+20%,+8Hz),悲伤(-20%,-5Hz)。情感版跳过后处理。
 §
 画师(wanx-v1): 768x1152→1080x1920, ~0.02元/张, 异步轮询。暗黑漫画风：黑白+高对比+红色点缀。带固定风格前缀。
-§
-主人说「等我通知再跑」——搬砖大队全流程需等主人明确指示再执行，不能擅自跑新任务。
 §
 hermes-online-notify.service 脚本在 /root/.hermes/scripts/hermes-online-notify.sh，发飞书"元宝已上线 🟢"。历史bug见skill/Hermes Agent技能库。中国药典2025在线数据库：官方 https://2025.chp.org.cn，蒲标网 https://db2.ouryao.com/yd2025/。查中药禁忌和用量用这两个站。主人运营广积德中医医院，需要查药典。
 §
@@ -47,8 +43,6 @@ Nginx临时目录权限修复(2026-06-02)：/var/lib/nginx/和/var/lib/nginx/tmp
 Token管家v1.2.0: v4-flash定价手动缓存(cache/pricing-litellm.json)。cron改用自包含prompt(无skills加载)。rtk gain --daily。
 §
 主人会自己打开浏览器F12 Network面板找API请求并截图配合逆向工程，技术动手能力强。偏好直接给信息而非一步步解释。
-§
-v0.18.0已升级。新增: MoA一等公民(预设可切换)、Completion Contracts(/learn即时创建技能、/journey记忆时间线)。
 §
 Daisy Financial Research + stocks skill已装。TUSHARE_TOKEN已配。Hermes venv有tushare/akshare/yfinance/stockstats。Daisy的SKILL.md已适配Hermes原生web_search/web_extract。池中银行基金：天弘中证银行(515290/001594,11年零分红)。
 §
@@ -59,3 +53,7 @@ Fund pool (~/.hermes/fund_portfolio.db): 24只基金。银行主题: 天弘中�
 DeepSeek 峰谷定价(7月中旬起)：高峰9-12点和14-18点2倍价格。所有Cron已避开高峰。主人偏好成本敏感调度，大批量任务/对话建议安排谷时(12-14点或18点后)。
 §
 Token 日报 cron(6692013a0292) 修复：原 prompt 写死「今天是2026-06-09」，2026-07-25 已改为动态获取日期「获取当前服务器的实际日期」。
+§
+复诊模块2026-08改版: 新表follow_up_records(每患者每月一行,fu1/2/3_status+date+planned窗口+total_quantity/end_date快照+prescription_type/doctor,is_stopped,唯一键姓名+性别+年龄+month)。时段=取药后10~19/20~29/30~39天循环(近7天料数×30天),距取药<5天整体顺延10天。GET用原生SQL UPSERT(ON CONFLICT)+5分钟文件锁防并发冲突,单事务批量提交。权限:yizhu001/GJD-A/GJD-B看全部,医助看自己。统计:合计已复诊=3次全完成。停服/已停药=自动状态灯(到end_date绿,+40天已停药绿)不手动编辑,40天自动停服。搜索支持首拼(pinyin字段)。历史未迁移,统计从2026-08起算。
+§
+Nginx /static/ 设 expires 7d+immutable: 改静态JS/CSS后浏览器缓存7天不更新(曾致复诊页报Unexpected token和数量列空白)。绕法: common.js动态加载已加?v=Date.now(); PWA版本号?v=N需手动升; 改完静态文件提醒主人强刷。page-admin-users.js的getElementById ID须与admin-users.html一致(edit-user-*前缀)。

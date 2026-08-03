@@ -56,6 +56,10 @@ psql -h localhost -p 5432 -U gaofang_app -d gaofang_v2
 | `payment_status` | varchar(20) | 支付状态 |
 | `shipping_time` | date | 邮寄时间 |
 | `pickup_date` | date | 取药时间 |
+| `follow_up_status` | varchar(20) | 复诊总体状态（默认'待回访'，超40天自动转'已停服'） |
+| `follow_up_1_status` / `follow_up_1_date` | varchar(20) / date | 第1次复诊状态/日期 |
+| `follow_up_2_status` / `follow_up_2_date` | varchar(20) / date | 第2次复诊状态/日期 |
+| `follow_up_3_status` / `follow_up_3_date` | varchar(20) / date | 第3次复诊状态/日期 |
 | `created_at` | timestamp | 创建时间 |
 | `updated_at` | timestamp | 更新时间 |
 
@@ -230,7 +234,16 @@ ORDER BY 总料数 DESC;
 
 ---
 
-## 关联信息
+## 复诊/回访模块
+
+复诊列表（GET /api/follow-up）、服用提醒（GET /api/reminders）、更新复诊（POST /api/follow-up/update）、停服（POST /api/follow-up/stop）、复诊统计（/api/follow-up/statistics + /stats/follow-up-stats）的**实施后基线**（2026-08-03 已上线：新表 follow_up_records 方案B、每月3次复诊 10~19/20~29/30~39 循环+顺延规则、权限统计、PWA/PC 改版、PC 保存 bug 已修、PWA 统计 Tab 改版、PWA 搜索栏+首拼搜索（后端返回 pinyin/pinyin_initial）、停服/已停药自动状态灯（前端按 end_date / end_date+40 计算颜色，不再手动编辑）、admin 用户管理 ID 不匹配 bug 已修），以及实施陷阱（PostgreSQL GRANT 权限、测试 token 用真实 user_id、schedule 边界缓冲、JS 中文引号、**并发唯一键冲突→"Unexpected token '<'"→UPSERT+节流锁+单事务提交 146s→0.06s**、**Nginx expires 7d immutable 静态缓存→cache-busting（?v= 版本号/时间戳）**、处方类型/医生快照字段、**统计必须基于全量数据不能基于筛选后子集**、**getElementById ID 与 HTML 不匹配→"Cannot set properties of null"→ID 交叉核对脚本**、**前端日期比较用 new Date(y,m-1,d) 本地构造避免时区偏移**），全部见 `references/followup-module.md`。
+
+⚠️ **生产代码改动工作流（主人操作习惯）**：
+1. 先读逻辑 → 2. **先备份当前逻辑**（`backups/followup_logic_backup_YYYYMMDD_HHMMSS/`，按 backend/ pc/ mobile/ 分目录避免 PC/PWA 同名 JS 互相覆盖；cp 后 md5 校验）→ 3. 列方案让主人确认 → 4. 才动手改 → 5. 改后重启 Gunicorn 验证。
+- 备份注意：`static/js/` 与 `static/mobile/js/` 下存在**同名文件**（如 page-followup.js），cp 到同一目录会互相覆盖，必须分目录。
+- 项目是 git 仓库（master），备份前先 `git status` 确认改动基线。
+
+---
 
 - 应用路径：`/workspace/projects/drug-distribution-system/gaofang-v2/`
 - 日志路径：`/workspace/projects/drug-distribution-system/gaofang-v2/logs/`
