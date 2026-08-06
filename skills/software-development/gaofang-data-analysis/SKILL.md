@@ -234,6 +234,19 @@ ORDER BY 总料数 DESC;
 
 ---
 
+## 权限架构（2026-08-06 重构）
+
+数据库已加组织架构级 RBAC：**groups 表**（一组/康安路店/宝宇店/先锋路店）、
+**director_group_scope 表**（总监→小组多对多）、**users.group_id**（用户挂组）。
+新角色：super_admin / pharmacy_admin / leadership / director / group_leader（assistant 保留）。
+数据范围：超管/药局/领导层=全部；总监=配置的小组；组长=本组；医助=自己名下。
+字段级权限：`prescription_type:view` / `doctor:view` 仅药局管理员可见（剂型/医生列）。
+后端统一用 `get_visible_scope()` + `_apply_scope_filter()`，**禁止硬编码账号名单**。
+⚠️ **2026-08-06 e2e 测试：API 层 scope/脱敏尚未生效**（prescriptions.py / follow_up_management.py 路由缺 `@auth_required` → 全员可见全量、admin 也被脱敏、匿名可读写；stats.py/excel.py 正常）。修复与回归用例见 `references/permission-architecture.md` §9。
+完整实现、迁移 SQL、陷阱与待办见 `references/permission-architecture.md`。
+
+---
+
 ## 复诊/回访模块
 
 复诊列表（GET /api/follow-up）、服用提醒（GET /api/reminders）、更新复诊（POST /api/follow-up/update）、停服（POST /api/follow-up/stop）、复诊统计（/api/follow-up/statistics + /stats/follow-up-stats）的**实施后基线**（2026-08-03 已上线：新表 follow_up_records 方案B、每月3次复诊 10~19/20~29/30~39 循环+顺延规则、权限统计、PWA/PC 改版、PC 保存 bug 已修、PWA 统计 Tab 改版、PWA 搜索栏+首拼搜索（后端返回 pinyin/pinyin_initial）、停服/已停药自动状态灯（前端按 end_date / end_date+40 计算颜色，不再手动编辑）、admin 用户管理 ID 不匹配 bug 已修），以及实施陷阱（PostgreSQL GRANT 权限、测试 token 用真实 user_id、schedule 边界缓冲、JS 中文引号、**并发唯一键冲突→"Unexpected token '<'"→UPSERT+节流锁+单事务提交 146s→0.06s**、**Nginx expires 7d immutable 静态缓存→cache-busting（?v= 版本号/时间戳）**、处方类型/医生快照字段、**统计必须基于全量数据不能基于筛选后子集**、**getElementById ID 与 HTML 不匹配→"Cannot set properties of null"→ID 交叉核对脚本**、**前端日期比较用 new Date(y,m-1,d) 本地构造避免时区偏移**），全部见 `references/followup-module.md`。

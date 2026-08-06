@@ -22,7 +22,7 @@ Token管家技能: token-manager(devops/)。TokScale+RTK已就绪，全局Hook�
 §
 team-architect v1.0.0: 8条铁律(第8条=所有操作先请示)。影墨三大件已补齐，金脉/星光缺独立技能库待主人指示。
 §
-OpenViking v0.3.14已部署并运行中:127.0.0.1:1933,systemd已启。Embedding=硅基流动BAAI/bge-m3(1024维),VLM=Qwen/Qwen3-8B。Hermes memory.provider=openviking。工作区/workspace/openviking_workspace。旧memory_store.db 31条事实已全部迁移完成(文件系统写入+自动索引),搜索引擎可检索,VL自动生成中文摘要。
+OpenViking v0.3.14已部署运行中:127.0.0.1:1933,systemd已启。Embedding=硅基流动BAAI/bge-m3(1024维),VLM=Qwen/Qwen3-8B。Hermes memory.provider=openviking。工作区/workspace/openviking_workspace。搜索引擎可检索,VL自动生成中文摘要。
 §
 团队架构铁律：每agent必须有三大件(SKILL+SOUL+MEMORY)+≥5条铁律+独立技能库。17个agent已全部就绪。
 §
@@ -52,8 +52,8 @@ Fund pool (~/.hermes/fund_portfolio.db): 24只基金。银行主题: 天弘中�
 §
 DeepSeek 峰谷定价(7月中旬起)：高峰9-12点和14-18点2倍价格。所有Cron已避开高峰。主人偏好成本敏感调度，大批量任务/对话建议安排谷时(12-14点或18点后)。
 §
-Token 日报 cron(6692013a0292) 修复：原 prompt 写死「今天是2026-06-09」，2026-07-25 已改为动态获取日期「获取当前服务器的实际日期」。
-§
-复诊模块2026-08改版: 新表follow_up_records(每患者每月一行,fu1/2/3_status+date+planned窗口+total_quantity/end_date快照+prescription_type/doctor,is_stopped,唯一键姓名+性别+年龄+month)。时段=取药后10~19/20~29/30~39天循环(近7天料数×30天),距取药<5天整体顺延10天。GET用原生SQL UPSERT(ON CONFLICT)+5分钟文件锁防并发冲突,单事务批量提交。权限:yizhu001/GJD-A/GJD-B看全部,医助看自己。统计:合计已复诊=3次全完成。停服/已停药=自动状态灯(到end_date绿,+40天已停药绿)不手动编辑,40天自动停服。搜索支持首拼(pinyin字段)。历史未迁移,统计从2026-08起算。
+膏方权限架构2026-08-06重构(RBAC+组织架构全动态):角色=super_admin(admin)/pharmacy_admin(yaoju001/002)/leadership(GJD-A/GJD-B只读)/director(zj001全组,zj002三门店)/group_leader(店长文员看全店)/assistant(医助看自己)。groups:一组(17老医助)+康安路店/宝宇店/先锋路店。新店13用户全拼用户名(gaoxinya等),密码=用户名+123456;医助+总监密码已统一。剂型/医生仅pharmacy_admin可见;SPECIAL_ACCOUNTS已移除,get_visible_scope()解析。编辑权限:仅pharmacy_admin可改医助/电话/发货时间/状态/是否传方;其他角色(含店长总监)只能改医助+电话;数量全员只读。skill:flask-rbac-data-scope
 §
 Nginx /static/ 设 expires 7d+immutable: 改静态JS/CSS后浏览器缓存7天不更新(曾致复诊页报Unexpected token和数量列空白)。绕法: common.js动态加载已加?v=Date.now(); PWA版本号?v=N需手动升; 改完静态文件提醒主人强刷。page-admin-users.js的getElementById ID须与admin-users.html一致(edit-user-*前缀)。
+§
+复诊窗口过滤:复诊列表只显示本月+下月上半月窗口(fu1_start≥本月1日且fu3_end≤下月15日),PC和移动端同接口生效;统计/排行接口保留全量不受影响。

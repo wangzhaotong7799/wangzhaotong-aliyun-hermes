@@ -148,6 +148,9 @@ if _has_role('guest'):
 - **Gunicorn 缓存不一致**：修改角色逻辑后必须清 __pycache__ 并 `fuser -k <port>/tcp` 重启
 - **角色叠加**：SQLAlchemy filter 默认 AND 叠加，需要互斥时用 `if/elif` 控制流
 - **搜索参数不应按角色封锁**：搜索/筛选权限与数据查看权限是两码事
+- **⚠️ 重构时装饰器丢失（本次踩坑）**：把"手动解析 token"（`verify_token(request.headers)`）重构为统一权限函数（`get_visible_scope()` 依赖 `@auth_required` 注入的 `g.user_id`）时，必须同步给**所有路由补 `@auth_required`**。否则 `g.user_id` 从不注入 → 数据范围过滤/字段脱敏全部失效 + **匿名可访问写接口（安全漏洞）**。重构后用匿名请求测试 `GET/POST/DELETE` 应返回 401 来验证。
+- **数据范围解析优先级**：super_admin > pharmacy_admin > leadership > director（查 director_group_scope 表）> group_leader（本组）> assistant（自己），返回 None=全部可见，纯数据库查询无硬编码账号
+- **字段级权限**：敏感字段（剂型/医生）用 `xxx:view` 权限点控制，后端返回时置 None + 前端按 `/me` permissions 动态隐藏列，双保险
 
 #### 引用文件
 
