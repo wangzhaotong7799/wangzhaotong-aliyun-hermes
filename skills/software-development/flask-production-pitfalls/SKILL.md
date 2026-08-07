@@ -1,6 +1,6 @@
 ---
 name: flask-production-pitfalls
-description: Flask/Gunicorn/PostgreSQL 生产环境常见故障模式 — 多 worker 并发写库竞态(UPSERT+文件锁)、静态缓存(cache-busting)、前后端 ID 不匹配、500 返回 HTML 的诊断线索
+description: Flask/Gunicorn/PostgreSQL 生产环境常见故障模式 — 多 worker 并发写库竞态(UPSERT+文件锁)、静态缓存(cache-busting)、游客模式 401、前后端 ID 不匹配、500 返回 HTML 的诊断线索
 version: 1.0.0
 author: Hermes Agent
 license: MIT
@@ -142,6 +142,82 @@ print([i for i in sorted(js_ids) if i not in html_ids])  # → 不匹配清单
 **Symptom**: tab 筛选（后端只返回待复诊）后，前端在返回数据上统计"已复诊 X 人"→ 已复诊的人不在返回里 → 恒为 0。
 
 **Fix**: **一次拉全量**（不带筛选参数，limit 设 5000），前端本地按 tab 过滤列表 + **基于全量统计** 待/已/共 三个数字。数据量可控（几百条/几百 KB）时优先全量。
+
+---
+
+## Pattern 6: 未登录（游客）访问被 401 拦截 → 前端需自动 guest-login
+
+**Symptom**: 未登录打开首页（如膏方记录页）显示"加载失败，请重试: 网络请求失败: 401"，登录后一切正常。用户期望**不登录也能看"未取"列表**。
+
+**Root Cause**: 系统设计了游客模式（`/api/auth/guest-login` 返回 roles=['guest'] 的 token；后端 `_check_guest_role()` 对 guest 只返回 `status=='未取'` 记录且 `_mask_sensitive_fields()` 隐藏医生/剂型），移动端 PWA 已实现（登录页"游客登录(仅查看未取)"按钮），但 **PC 端某些页面未登录时直接无 token fetch**，被 `@auth_required` 在入口硬拦成 401。
+
+**Fix**: PC 端未登录时先自动调 guest-login 拿 token，再带 `Bearer` 请求；登录用户逻辑不变：
+```javascript
+const fetchPrescriptions = authToken
+    ? Promise.resolve(authToken).then(requestWithToken)
+    : fetch(window.app.API_BASE_URL + '/auth/guest-login', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.token) throw new Error(data.error || '游客登录失败');
+            return requestWithToken(data.token);
+        });
+```
+
+**Verification**（curl 直接验证后端游客路径）:
+```bash
+GUEST_TOKEN=$(curl -s -X POST http://127.0.0.1:8080/api/auth/guest-login -H "Content-Type: application/json" | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
+curl -s "http://127.0.0.1:8080/api/prescriptions?status=未取" -H "Authorization: Bearer $GUEST_TOKEN" -w "HTTP %{http_code}\n"
+# 应 200，且 doctor / prescription_type 为 null（敏感字段已隐藏）
+```
+
+**Key insight**: 后端已支持游客 ≠ 前端自动用游客模式。排查 401 前先问：这个页面是否本来就该未登录可看？若是，找 guest-login 流程（移动端 api.js 是参照实现）。
+
+## Pattern 7: 缓存旧 JS 跳转已删路径 → 顽固 404（cache-busting 进阶）
+
+**Symptom**: 改 JS 后用户仍看到旧行为——甚至**跳转到已删除的路径**（如 `/api/login` GET 404，`{"error":"请求的资源不存在"}`），强刷 F5 也没用。磁盘代码明明已改对。
+
+**Root Cause**: Pattern 3 的延伸——**index.html 直接引用的静态脚本若没版本号**，会被 Nginx `expires 7d + immutable` 缓存 7 天。浏览器一直执行旧 JS（含旧的跳转/旧字段名）。common.js 动态加载的页面脚本带 `?v=Date.now()` 不受影响，但 index.html 里 `<script src>` 直引的没有。
+
+**Debug 线索**: 用户报的路径/行为与磁盘代码不符 → 先 `curl -s http://host/ | grep -o 'xxx[^"]*'` 确认 index.html 是否已带新版本号，再 curl 带版本号的 JS 确认内容。
+
+**Fix**: 改完静态 JS 后**必须同步升 index.html 里对应 script 标签的版本号**：
+```html
+<!-- 改前 -->
+<script src="/static/js/page-prescriptions.js"></script>
+<!-- 改后 -->
+<script src="/static/js/page-prescriptions.js?v=20260807"></script>
+```
+光靠用户 Ctrl+F5 对 immutable 缓存不一定生效——version-bump 是唯一可靠兜底。
+
+## Pattern 8: 登录后 localStorage.permissions 永远为空 → 权限门控字段全员 disabled
+
+**Symptom**: 编辑弹窗里某些字段（如剂型、医生）**所有用户都置灰**——连应该可编辑的药局管理员也不行。数据库里角色明明有对应权限点（`prescription_type:view` / `doctor:view`），后端 PUT 也放行，但前端就是灰的。
+
+**Root Cause**: 登录成功后的**异步竞态**——`fetch('/api/auth/me')` 异步拉权限写 `localStorage.permissions`，但紧接着同步代码里 `window.location.reload()` **立即刷新页面**，fetch 还没 resolve 页面就 reload 了 → 权限永远写不进 localStorage → `checkPermission()` 恒 false → `disabled = !canViewType` 恒 true。
+
+**Debug 线索**: 浏览器 console 查 `localStorage.getItem('permissions')` 是 `null`（而非 `[...]`）；但手动 `fetch('/api/auth/me')` 返回的 permissions 数组完整。**先怀疑登录写入时序，不要怀疑后端/装饰器/权限点**。
+
+**Fix**: 权限拉取完成后（或超时兜底）再刷新：
+```javascript
+var permissionFetch = fetch('/api/auth/me', { headers: {'Authorization': 'Bearer ' + data.token} })
+    .then(r => r.json())
+    .then(me => {
+        var perms = [];
+        if (me && me.permissions) perms = me.permissions.map(p => p.name || p);
+        localStorage.setItem('permissions', JSON.stringify(perms));
+    })
+    .catch(() => localStorage.setItem('permissions', '[]'));
+var permissionTimeout = new Promise(resolve => setTimeout(resolve, 3000));
+Promise.all([permissionFetch, permissionTimeout]).then(() => {
+    // hide modal; updateLoginStatus(); window.location.reload();
+});
+```
+
+**⚠️ 改 common.js 后必须同步升 index.html 的版本号**（Pattern 7）：`common.js?v=20260803` → `?v=20260807b`，否则 immutable 缓存让修复不上线。
+
+**Verification**: 登录后 console 查 `localStorage.getItem('permissions')` 含目标权限点；打开编辑弹窗查 `document.getElementById('edit-prescription-type').disabled === false`。
+
+**Key insight**: 「所有角色都不能编辑」几乎从不是权限配置问题——是**权限数据根本没加载到前端**。后端权限点存在 + 前端 checkPermission 恒 false = 登录写入链路的 bug。
 
 ---
 

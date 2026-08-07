@@ -71,13 +71,80 @@ def get_visible_scope(user_id=None):
 if not is_admin:  # 非药局
     allowed = ['assistant', 'patient_phone']
     data = {k: v for k, v in data.items() if k in allowed}
-else:  # 药局：数量仍不可改
-    data = {k: v for k, v in data.items() if k != 'quantity'}
+else:  # 药局：数量/剂型/医生仍不可改
+    data = {k: v for k, v in data.items() if k not in ('quantity', 'prescription_type', 'doctor')}
 ```
 前端编辑弹窗字段 `disabled` 同步，数量框置灰（#e9ecef 背景 + #6c757d 文字）。先问清业务规则再定编辑权限，别默认放大。
+   **⚠️ 剂型/医生 = 永久只读（主人 2026-08 明确纠正）**：剂型和医生是**任何用户（含 pharmacy_admin/super_admin）都不能编辑**的字段——`prescription_type:view`/`doctor:view` 权限点只控制**可见性**（列显隐），**不控制编辑**。曾误把"查看权限"当"编辑权限"（`disabled = !canViewType`）导致药局拿到查看权限后也能编辑，主人纠正方向。正确实现：前端编辑弹窗中剂型/医生**永远 disabled**（所有角色）；后端 PUT 白名单把 `prescription_type`/`doctor` 与 `quantity` 一起排除（防绕过前端直接调 API）。修改字段编辑权限前，先确认业务规则（哪些字段本就该只读），不要看到"有人不能编辑"就当成 bug 修。
+   **⚠️ 字段只读必须前后端双保险**：前端 disabled 只是 UX，恶意请求 PUT 仍可改 → 后端必须同字段过滤。验证：用超管 token PUT 尝试改该字段，确认数据不变。
 10. **⚠️ 下拉数据源不要只查业务表**：医助/用户下拉若只从 prescription_records 表 DISTINCT 查，**新建用户名下无历史处方 → 下拉永远为空**（"下拉没连上"）。改为：users 表（按业务角色 assistant/group_leader/director 过滤 + status=active + 按 get_visible_scope 过滤）**合并**业务表历史值（含离职/外部医助），去重排序返回。SQLAlchemy 老版本用 `.join(User.roles).filter(Role.id.in_(ids)).distinct()`（`exists().where()` 有兼容坑）。
 11. **⚠️ 删除/改名角色必须同步前端**：数据库删角色（如删旧 admin/yaoju/pharmacy 角色）后，前端 `roles.indexOf('admin')` 等旧判断不会自动失效 → **被删角色的用户打不开对应页面**（实测 admin 打不开角色管理页）。删除前 `grep -rn "roles.indexOf\|roles.includes\|'admin'\|'yaoju'\|'pharmacy'\|'药局'" static/js/ static/mobile/js/` 全量排查，统一改为新角色名或 `checkPermission()` 权限点；后端 app.py/各 api 的 `set(['admin','yaoju',...])` 硬编码角色集合同样清理。
 12. **时间范围过滤业务模式**："只显示本月+下月上半月窗口"：`fu1_planned_start >= 本月1日 AND fu3_planned_end <= 下月15日`（`_window_cutoff` 跨 12 月要处理 `year+1`）。PC 与移动端共用接口则同时生效；统计/排行接口保留全量。
+13. **⚠️ 登录后 permissions 竞态（前端字段权限全失效的隐蔽根因）**：登录成功代码里 `fetch('/api/auth/me')` 异步拉权限写入 localStorage，但**紧接着 `window.location.reload()` 立即执行** → 页面刷新打断 fetch，permissions 永远写入失败（null/空数组）→ `checkPermission('prescription_type:view')` 等全部返回 false → 前端按权限点控制的字段全部 disabled/隐藏（表现为"任何用户都不能编辑剂型/医生"——误以为权限配置错，实际是 permissions 没加载）。修复：把 reload 放进权限拉取的 Promise 链之后，并加超时兜底：
+```javascript
+var permissionFetch = fetch('/api/auth/me', {headers: {'Authorization': 'Bearer ' + data.token}})
+    .then(r => r.json())
+    .then(me => {
+        var perms = (me && me.permissions) ? me.permissions.map(p => p.name || p) : [];
+        localStorage.setItem('permissions', JSON.stringify(perms));
+    })
+    .catch(() => localStorage.setItem('permissions', '[]'));
+var permissionTimeout = new Promise(resolve => setTimeout(resolve, 3000));
+Promise.all([permissionFetch, permissionTimeout]).then(() => { window.location.reload(); });
+```
+**诊断顺序**：用户报"某字段所有人不能编辑/不可见" → ① 浏览器 console 查 `localStorage.permissions` 是否为 null/空（登录后）；② curl `/api/auth/me` 确认后端确实返回权限点；③ 若前端 null 而后端有 → 竞态 bug，不是权限配置问题。修复后**必须升 index.html 里 script 引用的 `?v=` 版本号**（Nginx `/static/` 缓存 7d immutable，不升版本号浏览器永远跑旧 JS——曾导致"修好了但页面还报错"）。
+
+14. **⚠️ 医生角色：数据范围匹配不同列（doctor 而非 assistant）+ 业务归属规则**：新增 `doctor` 角色（医生只看自己的患者）时，数据范围返回的姓名列表要匹配 `model.doctor` 字段而不是默认的 `model.assistant`。实现：
+```python
+# auth.py — get_visible_scope() 加分支（放在"全部可见"之后）
+if 'doctor' in role_names:
+    return [user.full_name or user.username]  # 医生只匹配自己
+
+# auth.py — 辅助函数（所有接口共享）
+def is_doctor_role(user_id=None):
+    from flask import g
+    roles = getattr(g, 'roles', None)
+    if roles is None:
+        token = request.headers.get('Authorization')
+        payload = verify_token(token[7:]) if token and token.startswith('Bearer ') else None
+        roles = payload.get('roles', []) if payload else []
+    return 'doctor' in roles
+
+# 各接口过滤函数（prescriptions/followups/follow_up_management/stats 共 5 处同名函数）
+if is_doctor_role():
+    return query.filter(model.doctor.in_(scope))  # 医生按 doctor 列
+# 其他角色继续走原有 model.assistant.in_(scope) 逻辑
+```
+   **⚠️ 医生可见性 = 只看自己名下的处方**（`doctor == 自己的 full_name`），**不包含"该医生名下医助的患者"**——主人明确业务规则：**医院存在一个医助跟 4-5 个医生的事实，归属以处方号对应的医生为准**（`prescription_records.doctor` 字段），不要动态推导医助归属（会把患者分给多个医生）。若需求提到"含医助患者"，先向主人确认归属规则再实现。
+   **医生角色只读**：角色权限仅分配 `data:read`（无 `data:write`），仿 leadership 只读；前端操作列 `!roles.includes('doctor')` 才显示编辑按钮，隐藏导入/打印，保留查看/服用提醒/复诊/统计/导出（导出数据范围后端已过滤）。注意 `common.js` 的 `canSeeFollowup` 已含 `hasDoctor`（提醒/复诊菜单自动可见），只需确保编辑入口被门控。
+   **⚠️ 只读角色必须拦截 ALL 后端写接口（不只 PUT）**：曾实测医生 PUT 改医助返回 200（被"非药局角色只能改 assistant+phone"分支放行，未走 leadership 拦截）——只读角色要逐接口 grep 补拦截，拦截点统一写 `is_leadership or is_doctor`：
+   - `prescriptions.py`: `update_prescription` (PUT) + `delete_prescription` (DELETE) — 两处 `_get_token_user_info()` 后判 `'leadership' in roles or 'doctor' in roles`
+   - `followups.py`: `update_reminder_status` (POST) — 在 `_is_leadership_role()` 处加 `or is_doctor_role()`
+   - `follow_up_management.py`: `update_follow_up_status` + `stop_follow_up`（两处 POST，各有一个手写 `verify_token` 判 leadership 的块，都要加 doctor）
+   - `import` 接口有角色白名单（super_admin/pharmacy_admin/director/group_leader/assistant），doctor 不在白名单自动 403，无需改
+   - 验证必须用**写接口实测**（登录医生账号 PUT/DELETE → 断言 403），不能只测 GET。
+   **验证方法（批量账号过滤断言）**：逐个医生账号登录后 GET `/api/prescriptions?page=1&page_size=5`，断言 `total == SELECT count(*) FROM prescription_records WHERE doctor = full_name`（数据库直查对照），并断言返回记录的 `prescription_type` 非 null（剂型可见）。
+   **新建医生用户**：`users.full_name` 必须与处方表 `doctor` 字段值**完全一致**（如"张翠华"），否则过滤结果为空。批量建用户脚本参考第 7 条（bcrypt + 角色 + 初始密码约定）。
+   **⚠️ 多医生映射表（一个医生账号可看多位医生）**：医院存在"一位医生看多名医生名下患者"的需求（如丛东海要看崔玉华+张翠华的患者）。不要动态推导（医助归属会串），建显式映射表：
+```sql
+CREATE TABLE doctor_user_doctors (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
+  doctor_name VARCHAR(50) NOT NULL, UNIQUE(user_id, doctor_name));
+```
+   - 模型 `DoctorUserDoctor` 放 `models/doctor_user_doctor.py`，并在 `models/__init__.py` 注册导出
+   - `get_visible_scope()` 的 doctor 分支改为：`names = [自己的 full_name]` + 查映射表 append 额外医生名（去重）
+   - **⚠️ 新表权限陷阱（实测 500）**：用 postgres 超级用户建表后，应用连接用户（如 `gaofang_app`）**没有权限** → 接口 500 `permission denied for table doctor_user_doctors`（app.log 才看得到，gunicorn-error.log 不一定有）。必须执行：
+     `GRANT ALL ON TABLE doctor_user_doctors TO gaofang_app;` + `GRANT USAGE ON SEQUENCE doctor_user_doctors_id_seq TO gaofang_app;`
+     新建任何表后先确认应用 DB 用户权限，别等 500 才发现。
+   **⚠️ 医生默认只显示最近 N 天，查询时看全部**（数据太多分页慢）：doctor 角色且**无任何查询/筛选参数**时默认加时间窗过滤，一旦带参数（patient_name/start_date/status/doctor/assistant 任一）就查全部历史：
+```python
+if not _is_guest and is_doctor_role() and not (
+    start_date or end_date or status or patient_name or prescription_id or doctor or assistant
+):
+    cutoff = (date.today() - timedelta(days=90)).isoformat()
+    query = query.filter(PrescriptionRecord.date >= cutoff)
+```
+   - 验证：默认列表 `total` 应 ≈ 数据库近 90 天 count；带 `start_date=2024-01-01` 后 total 应 = 全部历史 count。
+   **医生可看剂型 = 给 doctor 角色分配 `prescription_type:view` 权限点**（只加 view，不加 `doctor:view`——医生列不需要显示其他医生名，数据全是自己的；不加 `data:write`——保持只读）。剂型列显隐和 `_mask_sensitive_fields` 后端隐藏都读这个权限点，只配前端不配后端 = 列显示了但值为 null。
 
 ## 实施顺序
 

@@ -1367,6 +1367,41 @@ query = query.offset((page - 1) * page_size).limit(page_size)
 - JS runtime error from stale code
 - CDN failure (Chart.js, Bootstrap)
 
+### Issue 18: PC 端未登录误报 401 "加载失败" — 缺游客 guest-login 流程
+
+**症状**: 未登录打开 PC 首页"膏方领取记录"，显示"加载失败，请重试: 网络请求失败: 401"。但移动端 PWA 未登录正常（能看到未取列表）。
+
+**根因**: 系统设计上 PC 端首页支持**游客模式**（未登录可查"未取"列表）：
+- 后端已有完整游客机制：`POST /api/auth/guest-login` 返回 guest token（roles=['guest']），`_check_guest_role()` 识别 guest 后只返回 `status=='未取'` 记录，`_mask_sensitive_fields()` 隐藏医生/剂型字段
+- **但 PC 端 page-prescriptions.js 未登录时直接无 token 请求** `/api/prescriptions`，被 `@auth_required` 拦成 401
+
+**修复**: PC 端未登录时先调 guest-login 拿 token 再请求：
+```javascript
+let authToken = isLoggedIn ? window.app.getToken() : null;
+const fetchPrescriptions = authToken
+    ? Promise.resolve(authToken).then(requestWithToken)
+    : fetch(window.app.API_BASE_URL + '/auth/guest-login', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.token) throw new Error(data.error || '游客登录失败');
+            return requestWithToken(data.token);
+        });
+```
+
+**⚠️ 错误修法警示（曾踩坑）**: 不要简单把 401 改成"跳转 /login"——系统是 SPA，没有独立 /login 页面（登录用首页弹窗 + `POST /api/auth/login`），跳 `/api/login` 会 404。应先确认该页面是否设计为游客可访问（查后端有无 guest-login / guest 角色处理）。
+
+**⚠️ 浏览器缓存坑**: 改完 page-prescriptions.js 后，`index.html` 里直接引用的 `<script src="/static/js/page-prescriptions.js">` **没有版本号**，Nginx `/static/` 缓存 7 天 immutable，浏览器一直跑旧 JS（甚至旧的错误跳转逻辑）→ 现象是"修好了但页面还报错"。必须给 index.html 里的 script 引用加版本号：`?v=YYYYMMDD`，否则用户看不到修复。
+
+**验证**:
+```bash
+# 1. 游客登录
+GUEST_TOKEN=$(curl -s -X POST http://127.0.0.1:8080/api/auth/guest-login | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
+# 2. 游客查未取（应 200 且 doctor/prescription_type 为 null）
+curl -s "http://127.0.0.1:8080/api/prescriptions?status=未取" -H "Authorization: Bearer $GUEST_TOKEN" | python3 -m json.tool | head
+# 3. 确认 index.html 已带版本号
+curl -s http://127.0.0.1/ | grep -o 'page-prescriptions.js[^"]*'
+```
+
 ---
 
 ## Troubleshooting Decision Tree
