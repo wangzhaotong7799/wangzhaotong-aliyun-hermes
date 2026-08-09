@@ -205,3 +205,163 @@ print([i for i in sorted(js_ids) if i not in html_ids])  # → [] 才是全部�
 - 模糊搜索加拼音：后端补 pinyin/pinyin_initial 字段比前端引拼音库更干净（项目已有 pypinyin）。
 - 前端日期比较用 `new Date(y, m-1, d)` 本地构造，不要用 `new Date('YYYY-MM-DD')` 字符串构造（时区偏移坑）。
 - 「自动状态灯」类需求：去掉手动操作入口，前端按时间字段计算展示状态，后端自动逻辑（40 天停服）保持不变。
+
+## 上线后第七轮：复诊列表「在服患者」漏掉近一半 —— 窗口过滤条件 bug（2026-08-09）
+
+**症状**：主人报「复诊管理的在服患者数据有误」。
+
+**根因**：`api/v1/follow_up_management.py` GET /api/follow-up 的窗口过滤（约 365-368 行）写成了**整窗口必须完整落在 [本月1日, 下月15日] 内**：
+
+```python
+# ❌ 错误：要求整个窗口都在区间内
+rec_query = rec_query.filter(
+    FollowUpRecord.fu1_planned_start >= _month_start,   # 第1次复诊必须在本月1日之后
+    FollowUpRecord.fu3_planned_end <= _window_cutoff,   # 最后1次复诊必须在下月15日前结束
+)
+```
+
+漏掉两类在服患者：
+1. **上月取药、本月仍要复诊**（最常见）：如 7/20 取药 1 料，fu1 在 7/30（上月）→ 整行被过滤，本月 8/9~8/28 的 2~3 次复诊全看不见。
+2. **大单窗口跨下月15日**：如 8/8 取药 6 料（180天），fu1 从 8/28 开始，fu3_end=9/26 > 9/15 → 整行被过滤，首次复诊被漏。
+
+**验证方法**（对 follow_up_records 跑两个 COUNT 对比，今天=2026-08-09 实测 173 vs 345）：
+
+```sql
+-- 当前代码返回（错误）
+SELECT COUNT(DISTINCT (patient_name, gender, age)) FROM follow_up_records
+WHERE is_stopped = FALSE
+  AND fu1_planned_start >= '2026-08-01'
+  AND fu3_planned_end <= '2026-09-15';
+-- → 173
+
+-- 正确区间交集
+SELECT COUNT(DISTINCT (patient_name, gender, age)) FROM follow_up_records
+WHERE is_stopped = FALSE
+  AND fu3_planned_end >= '2026-08-01'
+  AND fu1_planned_start <= '2026-09-15';
+-- → 345
+```
+
+**修复**：过滤条件改为**窗口与 [本月1日, 下月15日] 有交集**：
+
+```python
+# ✅ 正确：区间交集
+rec_query = rec_query.filter(
+    FollowUpRecord.fu3_planned_end >= _month_start,     # 复诊窗口尚未完全结束
+    FollowUpRecord.fu1_planned_start <= _window_cutoff, # 复诊窗口已开始或即将开始
+)
+```
+
+修正后 `_pick_active_record` 无需改动：跨月患者仅 1 行时 fu2/fu3 在本月、fu3_end>=today → 命中"进行中"分支正常显示。
+
+**连带影响**：PWA 统计 Tab（本月复诊合计/复诊1/2/3）基于同一列表接口 `Api.getFollowups({limit:5000})` 前端本地统计 → 列表漏多少统计就漏多少。`/api/follow-up/statistics` 无窗口过滤、只排除 is_stopped，**不受影响**（PC 月度复诊率图是准的）。
+
+**通用教训**：日期窗口过滤一律用「区间交集」（A.end >= 区间起 AND A.start <= 区间止），不要写「A.start >= 区间起 AND A.end <= 区间止」——后者要求整个实体窗口落在区间内，会把跨边界的记录整条丢弃。排查"列表人数比预期少"时，先用 SQL 分别算两种口径对比，别急着改同步逻辑。
+
+**顺带发现的数据质量点**：`_group_patients` 按 姓名+性别+年龄 归组，姓名带后缀的同一患者不合并（如 `王丽华（赵）` 与 `王丽华（赵）-0.5` 两条并存）→ 同一人显示为两人。此类归组去重天然无法合并姓名变体，需在导入侧清洗。
+
+## 上线后第八轮：「在服患者」取数源头漏掉「已邮寄」—— 双重陷阱（2026-08-09 同会话）
+
+**症状延续**：主人强调「如何取在服患者的数据是关键」——窗口过滤修完（第七轮）仍不全，173→345 后还缺邮寄患者。
+
+**根因（双重陷阱）**：
+1. **同步源头只认 `status='已取'`**：`_sync_all_patients()` 和 `followups.py` reminders 都 `filter(status == '已取')` → **`已邮寄`（药已寄出、正在服用）患者完全不进复诊表**。实测：150 个已邮寄患者，仅 37 人有复诊记录（还是蹭了同名同性别同年龄的「已取」记录），**113 人完全没有**。
+2. **`_group_patients` 跳过无 pickup_date 的患者**：已邮寄患者 `pickup_date` 全为空（228/228）→ `if not pickup_str: continue` 直接丢弃 → 就算加上状态也会被跳过。
+
+**数据佐证**（2026-08-09）：7/8~7/28 邮寄的 5 个患者（马秀荣/王元剑（赖）/金洋/代红艳/杨立丽）8 月正在复诊期但列表完全看不到；姜树杰更典型——她有「已取」记录所以有复诊记录，但那是 5/6 旧疗程（已停服），**7/28 新邮寄的 1 料没生成任何复诊计划**。
+
+**修复（4 处）**：
+```python
+# 1. 同步源头（follow_up_management.py _sync_all_patients + followups.py reminders）
+query = query.filter(PrescriptionRecord.status.in_(['已取', '已邮寄']))
+
+# 2. 新增统一起始日期辅助函数（两个文件各一份，避免跨模块依赖）：
+def _get_start_date(d):  # followups.py 里叫 _fu_start_date
+    \"\"\"服用起始日期：已取用 pickup_date，已邮寄用 shipping_time，均空兜底处方日期 date\"\"\"
+    for field in ('pickup_date', 'shipping_time', 'date'):
+        val = d.get(field) or ''
+        if not val:
+            continue
+        s = str(val)
+        if ' ' in s:
+            s = s.split(' ')[0]
+        try:
+            return datetime.strptime(s, '%Y-%m-%d').date()
+        except Exception:
+            continue
+    return None
+
+# 3. _group_patients 排序与累加全部改用 _get_start_date：
+#    recs.sort(key=lambda x: _get_start_date(x) or date.min, reverse=True)
+#    r_date = _get_start_date(record)  # 7天累加窗口同样按起始日期
+
+# 4. 窗口过滤（第七轮已改）保持区间交集不变
+```
+已邮寄患者 shipping_time 为空的 99 条全是 2024-12~2025-08 历史记录（早过停服期），兜底 `date` 不影响当前；近期邮寄都有 shipping_time。
+
+**验证**（重启 Gunicorn + 删 /tmp/followup_sync_state 强制同步 + curl）：
+- 列表 173 → **352 人**（含全部 6 个抽查邮寄患者 + 跨月/长疗程患者）
+- 姜树杰：pickup_date=2026-07-28（邮寄日）、料数=2（7/28 两条 1 料累加）、8 月 fu1 8/7~8/16 ✅
+- 柳凤香：8/8 取药 6 料，fu1 8/28~9/6，end_date=2027-02-04 ✅（第七轮窗口修复生效）
+- 数据库：113 个邮寄患者新增复诊记录（正好补齐 150-37=113 缺口）
+- reminders 临期提醒正常（7 月初邮寄、8/7-8/8 刚结束的马秀荣/金洋/王元剑均在提醒列表）
+
+**通用教训**：业务上「在服/在用」的状态口径必须先问清主人包含哪些 status，**不能只凭代码里现有条件猜**。`已邮寄`（药已寄出即视为在服）是膏方业务的关键状态，`已取` 与 `已邮寄` 是并列的在服状态，`欠药/未取/已退药` 都不是。改状态过滤时同步排查：①源头 SQL ②归组/累加的时间字段 ③窗口过滤，三处口径要一致。
+
+## 上线后第九轮：统计界面新增 在服/停服/复购 概览（2026-08-09 同会话）
+
+**需求**：PC 复诊管理统计区增加：①在服患者数量 ②每月停服患者 ③每月复购患者。
+
+**主人确认的口径**：
+- **在服患者** = 未停服 且 end_date ≥ today（服用期未结束）。实测 330（vs 未停服全部 418、列表窗口 352）。
+- **每月停服** = 按 `end_date + 40天` 所在月份统计（自动停服逻辑时间），患者去重取最新疗程 end_date。实测累计 1307。
+- **每月复购** = 旧疗程 `end_date + 40天` 之后又有取药/邮寄记录（status IN 已取/已邮寄），按**新取药日期月份**统计，患者去重（同月多次复购算 1 人）。
+
+**实现**：`GET /api/follow-up/statistics` **返回结构从数组改为对象**（⚠️ 破坏性变更，前端同步改）：
+```json
+{
+  "monthly": [...],                 // 原月度复诊率数组（PC 折线图数据）
+  "active_patients": 330,
+  "stopped_total": 1307,
+  "stopped_by_month": [{"month":"2026-06","count":53}, ...],
+  "repurchase_by_month": [{"month":"2026-06","count":59}, ...]
+}
+```
+
+**复购算法关键**（prescription_records 全量 已取/已邮寄，按姓名+性别+年龄分组按起始日期排序）：
+```python
+prev_stop = None  # 最近一个疗程的 end_date + 40
+for rec in recs:
+    t = _get_start_date(rec)          # 起始日（pickup/shipping/date 兜底）
+    q = rec.get('quantity', 0) or 0
+    end = t + timedelta(days=q * 30)
+    if prev_stop is not None and t > prev_stop:
+        rep_by_month[t.strftime('%Y-%m')].add(key)   # set 去重
+    prev_stop = end + timedelta(days=40)             # 不管是否复购都更新基准
+```
+注意：**prev_stop 始终更新为当前疗程 end+40**（续方不中断链），同日多条记录（同一疗程拆单）不会误判复购。
+
+**前端**：
+- `templates/followup.html`：统计区加「复诊统计概览」卡片（当前在服/累计停服）+「每月停服与复购统计」两并排柱状图（stopped-chart / repurchase-chart，350px）
+- `static/js/page-followup.js`：`loadFollowUpStatistics` 改为解析 `data.monthly`；新增 `renderMonthlyBarChart(canvasId, chartVar, labels, counts, label, color)` 通用柱状图；卡片 `#stat-active-patients` / `#stat-stopped-total`
+- page-followup.js 由 common.js 动态加载（`?v=Date.now()`）不受 Nginx 7 天缓存影响；followup.html 走 /page/followup 动态路由同样不缓存
+
+**验证**：接口 curl 全字段正确；`/page/followup` 浏览器加载结构正常、console 0 错误。权限过滤已按 `_apply_scope_filter` 统一（医助看自己、组长看本组、admin 全量）。
+
+**通用教训**：改已有接口的返回结构（数组→对象）前先 grep 全项目确认引用方（本接口仅 PC page-followup.js 一处，PWA 统计 Tab 用列表接口不依赖它）。统计口径（在服/停服/复购）先让主人在候选数字里确认，再写代码——主人会手工核对数字。
+
+## 上线后第十轮：复诊管理 PC 列表分页（50条/页，2026-08-09 同会话）
+
+**需求**：复诊管理页改成和膏方记录页（处方管理）一样的分页，先加载 50 条。
+
+**参照物**：`templates/prescriptions.html` + `page-prescriptions.js` 的后端分页模式：请求带 `page` + `page_size`，后端返回 `{data, total, page, per_page, total_pages}`；前端 `updatePagination()` 渲染 `pagination-info` + 首页/上页/页码/下页/末页 + 每页条数 select。
+
+**实现**：
+1. **后端** `GET /api/follow-up`：在 limit 截断之后、return 前加分页切片。⚠️ **关键：分页必须在最终 result 列表上做（Python 切片），不能下推到 SQL**——因为接口有窗口过滤→患者分组→`_pick_active_record`→状态/日期筛选等 Python 层逻辑，SQL 层分页会破坏这些。有 page/page_size 参数时返回 `{data,total,...}`，否则保持数组（PWA 的 limit=5000 模式兼容）。
+2. **前端 followup.html**：表格后加分页控件，⚠️ **ID 全部加 `fu-` 前缀**（fu-pagination-info / fu-page-first 等）——因为 SPA 页面切换是**隐藏而非移除**（common.js `switchPage` 只 classList.remove('active')），处方页和复诊页 DOM 共存，相同 ID 会 getElementById 拿到隐藏的处方页控件。
+3. **前端 page-followup.js**：分页状态（fuCurrentPage/fuPageSize=50/fuTotalRecords）；请求带 page/page_size；响应兼容 `Array.isArray(data) ? data : (data.data||[])`；新增 `updatePagination()`（fu- 前缀）；bindEvents 绑分页按钮；搜索/筛选变化/**每页条数变化**时重置 fuCurrentPage=1。
+4. **导出不受影响**：`exportFollowUpData` 不带分页参数 → 后端返回数组全量 → 原有 `Array.isArray` 判断兼容。
+
+**验证**：352 条 → 8 页（第1页 50 条、末页 2 条）；无分页参数 limit=5 数组模式正常；`/page/followup` 浏览器渲染分页控件正常、console 0 错误。
+
+**通用教训**：SPA 多页面共存时，**新增控件 ID 必须带页面前缀**，否则隐藏页的相同 ID 会截胡 getElementById（处方页和复诊页都有 pagination-info 这类通用 ID）。后端分页要对齐"业务实体"（本接口的业务实体是"患者去重后的当前时段"），切片必须在所有 Python 层筛选之后做。

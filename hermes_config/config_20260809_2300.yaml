@@ -22,6 +22,7 @@ agent:
   environment_probe: true
   environment_hint: ''
   coding_context: auto
+  verify_on_stop: false
   gateway_timeout_warning: 900
   clarify_timeout: 600
   gateway_notify_interval: 600
@@ -67,7 +68,6 @@ agent:
     hype: YOOO LET'S GOOOO!!! 🔥🔥🔥 I am SO PUMPED to help you today! Every question
       is AMAZING and we're gonna CRUSH IT together! This is gonna be LEGENDARY! ARE
       YOU READY?! LET'S DO THIS! 💪😤🚀
-  verify_on_stop: false
 terminal:
   backend: local
   modal_mode: auto
@@ -83,6 +83,7 @@ terminal:
   singularity_image: docker://nikolaik/python-nodejs:python3.11-nodejs20
   modal_image: nikolaik/python-nodejs:python3.11-nodejs20
   daytona_image: nikolaik/python-nodejs:python3.11-nodejs20
+  vercel_runtime: node24
   container_cpu: 1
   container_memory: 5120
   container_disk: 51200
@@ -92,7 +93,6 @@ terminal:
   docker_extra_args: []
   docker_run_as_host_user: false
   persistent_shell: true
-  vercel_runtime: node24
   lifetime_seconds: 300
 web:
   backend: ''
@@ -122,8 +122,8 @@ checkpoints:
   max_file_size_mb: 10
   auto_prune: false
   retention_days: 7
-  delete_orphans: true
   min_interval_hours: 24
+  delete_orphans: true
 file_read_max_chars: 100000
 mcp_discovery_timeout: 1.5
 tool_output:
@@ -151,17 +151,6 @@ compression:
   abort_on_summary_failure: false
   codex_gpt55_autoraise: true
   in_place: false
-kanban:
-  dispatch_in_gateway: true
-  dispatch_interval_seconds: 60
-  failure_limit: 2
-  worker_log_rotate_bytes: 2097152
-  worker_log_backup_count: 1
-  orchestrator_profile: ''
-  default_assignee: ''
-  auto_decompose: true
-  auto_decompose_per_tick: 3
-  dispatch_stale_timeout_seconds: 14400
 prompt_caching:
   cache_ttl: 5m
 openrouter:
@@ -515,21 +504,22 @@ approvals:
   mcp_reload_confirm: true
   destructive_slash_confirm: false
 command_allowlist:
-  - kill hermes/gateway process (self-termination)
-  - delete in root path
-  - script execution via heredoc
-  - stop/restart hermes gateway (kills running agents)
-  - recursive delete
-  - overwrite system file via redirection
+  - execute_code
+  - copy/move file into system config path
   - in-place edit of system config
   - hermes update (restarts gateway, kills running agents)
-  - stop/restart system service
+  - delete in root path
   - overwrite project env/config file
-  - script execution via -e/-c flag
-  - SQL DELETE without WHERE
   - overwrite system config
-  - copy/move file into system config path
+  - script execution via heredoc
+  - recursive delete
+  - stop/restart system service
+  - stop/restart hermes gateway (kills running agents)
+  - script execution via -e/-c flag
+  - overwrite system file via redirection
   - in-place edit of Hermes config/env
+  - kill hermes/gateway process (self-termination)
+  - SQL DELETE without WHERE
 hooks_auto_accept: false
 security:
   allow_private_urls: false
@@ -552,6 +542,17 @@ cron:
     expected_audience: ''
     nas_jwks_url: ''
   wrap_response: true
+kanban:
+  dispatch_in_gateway: true
+  dispatch_interval_seconds: 60
+  failure_limit: 2
+  worker_log_rotate_bytes: 2097152
+  worker_log_backup_count: 1
+  orchestrator_profile: ''
+  default_assignee: ''
+  auto_decompose: true
+  auto_decompose_per_tick: 3
+  dispatch_stale_timeout_seconds: 14400
 code_execution:
   mode: project
   timeout: 300
