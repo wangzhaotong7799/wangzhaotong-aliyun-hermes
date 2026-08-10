@@ -591,6 +591,14 @@ When the systemd unit file shows a `WorkingDirectory` that doesn't exist on disk
     - Use `read_file` (from hermes_tools) with offset/limit — always works
     - Use a simpler `cat` command or `ls -la` on the log dir (these don't trigger the heuristic)
 
+14. **Flask catch-all route arbitrary file download vulnerability (Gaofang V2, found 2026-08-10).** `app.py` had `static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)))` — pointing at the **project root**, not the `static/` subdir. The catch-all route `@app.route('/<path:path>')` then did `send_from_directory(static_folder, path)`, so **any file in the project root was downloadable via HTTP**: `/.env` (DB password), `/config.py`, `/app.py`, `/auth.py`, `/api/v1/auth.py`, `/logs/gunicorn-error.log`, `/venv38/pyvenv.cfg`. Worse: `.env` lacked SECRET_KEY/JWT_SECRET_KEY so config.py fell back to the known default `'dev-jwt-secret-change-in-production'` — an attacker could forge admin JWTs. **Diagnosis**: Nginx config was clean (`location /` → proxy), the leak was Flask-level. **Fix (2 layers)**:
+    - Nginx (fast止血): added `location ~* ^/\.` (hidden files) and `location ~* \.(py|env|log|cfg|sql|sqlite|db|bak|old|sh|ini|conf|yml|yaml)$` (sensitive extensions) → `return 404`. Do NOT exclude `/api/` prefix — normal API paths don't have these extensions, but `/api/v1/auth.py` does and must be blocked.
+    - Flask (root cause): `static_folder` → `os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')`, and catch-all now rejects paths starting with `.`/`../` or ending with sensitive extensions.
+    - **Pitfall**: writing `\.` inside a Python heredoc → double-backslash `\\.` reaches the nginx conf and the regex silently fails. Always verify with a live curl after reload.
+    - **Verification**: after fix, `/.env`/`/config.py`/`/app.py`/`/api/v1/auth.py` → 404 (both :80 and :8080 direct); `/static/js/common.js`, `/mobile/manifest.json`, `/page/prescriptions` → 200. Gunicorn restart clean.
+    - **Follow-up needed**: rotate DB password, set real SECRET_KEY/JWT_SECRET_KEY in `.env` (this was only the emergency stopgap).
+
+
 ## References
 - `references/gaofang-v2-health-check-2026-06-22.md` — Clean baseline with zero 24h errors, normal SIGHUP reload, no new scanner IPs. DB connection via `source .env` pattern, June 22
 - `references/gaofang-v2-health-check-2026-06-20.md` — Clean baseline with Chart.js module enumeration scanner (172.104.140.44), June 20

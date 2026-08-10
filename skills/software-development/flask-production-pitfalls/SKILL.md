@@ -221,11 +221,56 @@ Promise.all([permissionFetch, permissionTimeout]).then(() => {
 
 ---
 
+## Pattern 9: 任意文件下载漏洞 — static_folder 指向项目根目录（高危）
+
+**Symptom**: 巡检时 curl 探测敏感路径全部返回 200：
+```bash
+curl -s http://host/.env                    # 200 → DB 密码泄露！
+curl -s http://host/config.py               # 200 → 源码+密钥配置
+curl -s http://host/api/v1/auth.py          # 200 → JWT 认证逻辑
+curl -s http://host/logs/gunicorn-error.log # 200 → 日志泄露
+```
+前端页面正常、API 正常，攻击面藏在**静态文件服务路由**里。
+
+**Root Cause（两个条件叠加）**:
+```python
+# ① static_folder 指向项目根目录（而非 static/ 子目录）
+static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)))
+# ② catch-all 路由 + send_from_directory(static_folder, path)
+@app.route('/<path:path>')
+def serve_other_static(path):
+    return send_from_directory(static_folder, path)
+```
+`send_from_directory` 会 URL 解码并防路径穿越，但**不限制目录内容**——目录指向项目根，`.env`/`*.py`/`logs/*.log` 全部可下载。
+
+**二次危害 — 默认 JWT 密钥回退**:
+`.env` 未设 `SECRET_KEY`/`JWT_SECRET_KEY` 时 config.py 回退到硬编码默认值（如 `'dev-jwt-secret-change-in-production'`）。该默认值随 config.py 泄露后，**攻击者可伪造任意用户 JWT（含 super_admin）登录系统**——比 DB 密码泄露更严重。
+
+**Debug 线索**: 先确认 200 来自谁——Nginx `location /` 是 proxy_pass 时，200 响应来自 **Flask 而非 Nginx**，别只查 Nginx 配置。找 app.py 里的 `static_folder =` 赋值行即可定位。
+
+**Fix（三层）**:
+1. **Nginx 立即止血**（不重启应用）:
+```nginx
+location ~* \.(env|py|log|cfg|ini|bak|old|swp|sqlite|db)$ {
+    deny all;
+    return 404;
+}
+```
+2. **Flask 根治**: `static_folder` 改指 `static/` 子目录；catch-all 白名单化或移除。
+3. **凭据轮换**（泄露过就必须换）: `.env` 生成强随机 `SECRET_KEY`/`JWT_SECRET_KEY`（`openssl rand -hex 32`）+ 轮换 DB 密码 + 重启 Gunicorn。
+
+**Verification**: 修复后重跑探测命令，`/.env`、`/config.py`、`/app.py`、`/auth.py`、`/logs/*.log` 应全部 404。
+
+> ⚠️ 巡检/健康检查时应**主动**跑敏感文件探测（`.env` `config.py` `app.py` `auth.py` `.git/config` `logs/*.log`），期望全 404。参考 `server-health-monitor` 的 Step 6（该技能未含此步时，以本 Pattern 为准）。
+
+---
+
 ## 完整案例
 
 膏方管理系统复诊模块 2026-08 改版完整过程（时段规则、UPSERT SQL 细节、压测数据、缓存修复链）见 `references/followup-module-overhaul-2026-08.md`。
 
 ## References
 
+- 任意文件下载漏洞完整诊断实录（膏方 V2, 2026-08-10）: `references/arbitrary-file-download-gaofang-2026-08-10.md`
 - PostgreSQL ON CONFLICT: https://www.postgresql.org/docs/current/sql-insert.html
 - Gunicorn workers/threads: https://docs.gunicorn.org/en/stable/design.html

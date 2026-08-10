@@ -8,8 +8,6 @@ Token管家v1.2.0(token-manager/devops): TokScale+RTK+全局Hook已装, 每日08
 §
 铁律第7条「宝塔面板不动原则」：任何时候严禁修改宝塔面板的任何代码文件（/www/server/panel/ 下的源码、前端、配置文件、数据库、模板）。仅限于通过 Web 界面管理。严禁直接编辑面板代码或操作面板 SQLite 数据库。配置修改必须通过宝塔 Web 界面或官方 API。
 §
-天网增强采集：Agent-Reach v1.4.0+union-search-skill(30+引擎免API)+Scrapling v0.4.8(过Cloudflare)。skill在gold-miner-sky。抖音/小红书用间接采集。
-§
 膏方V2数据库(PostgreSQL,gaofang_app): su - postgres -c "psql -d gaofang_v2"。路径/workspace/projects/drug-distribution-system/gaofang-v2/。核心表prescription_records(date,patient_name,age,quantity料数,status已取/已邮寄/未取/欠药/已退药,patient_phone,created_at导入时间)。import默认:状态=欠药,已传方=已传方,医助="-",电话允许空。重复prescription_id覆盖更新。date强制=date.today()(导入当日),非Excel处方日期。Gunicorn每日06:00热重启。
 §
 元宝（Hermes Agent）以「元宝」身份为主人效力——资深运营顾问，AI合伙人。沟通铁律：我是元宝，主人是主人，绝不混淆身份。结论先行佐证在后、克制精准。工作风格：带判断的交付、数据说话（必有环比）、沉默守护。安全红线：只读分析默认状态，写操作需明确确认。输出标准：精简格式化、数据必有趋势判断。
@@ -20,11 +18,9 @@ Token管家v1.2.0(token-manager/devops): TokScale+RTK+全局Hook已装, 每日08
 §
 飞书群「my-hermes agent」chat_id=oc_7404e0fa8470ca3e7f04d614b806fdaf。成员：①王海名 open_id=ou_19663774d0e144dffa4e16ce06e5ac22；②用户657799（主人）open_id=ou_b13ee47717bdd2c2627dcdd08c8dda05。可用飞书API查群成员/发私聊。
 §
-team-architect v1.0.0: 8条铁律(第8条=所有操作先请示)。影墨三大件已补齐，金脉/星光缺独立技能库待主人指示。
+金脉2026-08-10升级:算盘/军师/执笔SKILL v2.0(域权重+逆分约定+失败案例库+LTV模型+双版本输出),四成员MEMORY全更新,wealth-analyst v2.7.0加阶段八经验沉淀强制步骤。天网工具:Agent-Reach+union-search(30+引擎)+Scrapling v0.4.8,数据源全验证,抖音/小红书间接采集。影墨三大件已齐,星光缺技能库。team-architect v1.0.0: 8条铁律(第8条=所有操作先请示)。
 §
 OpenViking v0.3.14已部署运行中:127.0.0.1:1933,systemd已启。Embedding=硅基流动BAAI/bge-m3(1024维),VLM=Qwen/Qwen3-8B。Hermes memory.provider=openviking。搜索引擎可检索,VL自动生成中文摘要。
-§
-团队架构铁律：每agent必须有三大件(SKILL+SOUL+MEMORY)+≥5条铁律+独立技能库。17个agent已全部就绪。
 §
 DeepSeek v4 Flash定价($/M)：缓存命中0.0028,缓存未命中0.14,输出0.28。官网比TokScale多算~36% token。费用CNY=TokScale_USD×1.36×7.14。优先用CNY报告。
 §

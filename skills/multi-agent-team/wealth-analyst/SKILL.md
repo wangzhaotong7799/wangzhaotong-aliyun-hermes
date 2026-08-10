@@ -1,7 +1,7 @@
 ---
 name: wealth-analyst
 description: 金脉小队总指挥 - 调度多Agent全流程：数据采集→评分建模→策略分析→报告生成→平台交付
-version: 2.6.0
+version: 2.7.0
 author: wangzhaotong7799
 tags: [strategy, domain-analysis, market-research, team-orchestration, multi-agent]
 toolsets_required: ['terminal', 'file']
@@ -543,9 +543,7 @@ delegate_task(
 
 ### 阶段七（可选）：平台交付
 
-完成后，如果用户需要，通过飞书发送报告。
-
-**双版本交付原则（Cron/自动模式必遵守）：**
+完成后，如果用户需要，通过飞书发送报告。**双版本交付原则（Cron/自动模式必遵守）：**
 
 | 交付通道 | 内容 | 长度限制 | 方式 |
 |:---|:---|:---:|:---|
@@ -637,6 +635,44 @@ send_message(
 
 **验证记录**：2026年5月11日自媒体域8赛道Cron执行已验证该规则——报告以final response形式交付，Feishu步骤被正确跳过。
 
+### 阶段八：经验沉淀（记忆自动更新 — 每次执行必做，不可跳过）
+
+> **目的**：v2.7.0 起强制。经验只留在猎财一人手里 = 团队没有成长。每次执行完成，把本次新发现同步到对应成员，让全队复用。
+
+**执行时机**：报告交付后、任务结束前。
+
+**四步沉淀法（30秒内完成）：**
+
+1. **天网经验** → 更新 `gold-miner-sky/MEMORY.md` 经验记录
+   - 本次采集通过率/有效数据条数（如"17次Exa，108→88条有效 81.5%"）
+   - 新增的采集坑点/引擎选择经验
+   - 数据源可用性变化（某平台爬取方式变化）
+
+2. **算盘经验** → 更新 `gold-miner-abacus/MEMORY.md`
+   - 评分排名结果（Top3 + 垫底赛道 + 分数）
+   - 权重/计分约定有无新发现
+   - 置信度异常案例
+
+3. **军师经验** → 更新 `gold-miner-strategist/MEMORY.md`
+   - 新验证的失败案例关键词/分析框架
+   - LTV 估算校准值
+   - 新出现的平台政策风险点
+
+4. **执笔经验** → 更新 `gold-miner-scribe/MEMORY.md`
+   - 报告行数实测（对照经验值）
+   - 排版/交付新坑点
+   - 章节结构优化
+
+**写入格式**（每成员经验记录追加一行）：
+```markdown
+- **YYYY-MM-DD [域]**：本次新发现（一句话，含数字）
+```
+
+**沉淀的黄金标准**：下次执行时，成员能比上次做得更好（如通过率提升、评分更准、报告排版更规范）。如果连续两次没有任何新经验可沉淀，说明执行方式需要反思。
+
+> ⚠️ **沉淀不是可选项**：漏做 = 团队原地踏步。Cron 周报任务同样必须执行本步骤（交付后、final response 前）。
+
+
 **飞书交付集成**：\n- send_message 只能发送纯文本消息，不能发文件/附件。用户通过飞书 DM 接收报告（当前 chat_id 见 memory 和 cron prompt）\n- 长报告（>100行）分 2-3 段发送\n- 第一段：核心结论 + 评分排行\n- 第二段：平台政策 + 案例 + 路线图\n- 第三段：风险提示 + 附录\n\n**⚠️ 非网关模式下的飞书发送（当 send_message 工具不可用时）**\n\n通过 Feishu Open API 直接发送（Python + urllib）：\n```python\nsource ~/.hermes/.env 2>/dev/null\n# 1. 获取 token\nTOKEN=$(curl -s -X POST \"https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"app_id\":\"$FEISHU_APP_ID\",\"app_secret\":\"$FEISHU_APP_SECRET\"}' \\\n  | python3 -c \"import sys,json; print(json.load(sys.stdin).get('tenant_access_token',''))\")\n\n# 2. 发送文本消息\npython3 -c \"\nimport json, urllib.request\npayload = {\n    'receive_id': '<用户飞书DM chat_id>',  # 读取自memory或cron prompt\n    'msg_type': 'text',\n    'content': json.dumps({'text': '消息内容'}, ensure_ascii=False)\n}\nreq = urllib.request.Request(\n    'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',\n    data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),\n    headers={'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/json; charset=utf-8'},\n    method='POST')\nresp = urllib.request.urlopen(req)\n\"\n```\n避坑：\n- 每条消息建议控制在 600 字符以内，过长的消息可能导致 API 400 错误\n- emoji 和换行符需包含在 text 内容中，不要放到 JSON 结构外\n- TOKEN 过期时间为 2 小时，每次发送前重新获取
 - **评分表在飞书可能渲染不全** — 子 Agent 发送的报告中的 Markdown 表格可能不显示。解决办法：猎财巡检后，用 send_message 单独补发一份格式清晰的评分排行表。
 
@@ -661,6 +697,8 @@ send_message(
 | CPS周报(6赛道,并行采集+联合手动模式,truncate=1200) | 6 | 17(Exa) | ~310K | ~11.1K (299行报告) | ~4min |
 | CPS周报(6赛道,手动Exa单脚本19次搜索,truncate=1200) | 6 | 19(Exa) | ~330K | ~17.6K (256行报告) | ~4min |\n\n>
 > **2026-07-06 最新（CPS联盟营销域）**：17次 Exa 搜索（并行2路：外卖/电商/本地生活+平台政策 × 社交裂变/短视频/跨境+失败案例），truncate=1200。108条原始→79条有效（73.1%，并行采集效率稳定）。报告299行/11.1KB。社交裂变CPS蝉联第一(7.25)，本地生活CPS跃居第二(6.25)，跨境CPS因三重政策打击垫底(4.50)。全部6赛道≥7条有效数据。联合手动模式产出299行，符合CPS域预期行数范围(180-300行)。<br/>
+>
+> **2026-08-10 最新（CPS联盟营销域）**：17次 Exa 搜索（单脚本全量覆盖6赛道×2+3政策+2失败），truncate=1200。108条原始→88条有效（81.5%，深层恢复18条：平台首页+36kr ID+文本2026+URL隐式日期）。报告192行/13.4KB。社交裂变CPS蝉联第一(7.35)，本地生活CPS跃居第二(6.70)，跨境CPS垫底(5.20)。全部6赛道≥10条有效数据（历史最佳覆盖）。新信号：抖音分级定费+纯佣优先对冲5%佣金门槛、Shopee新加坡最低佣金率6%、TikTok Shop双端健康分准入。
 >
 > **2026-07-20 最新（CPS联盟营销域）**：19次 Exa 搜索（单脚本全量覆盖6赛道×2~3+2政策+2失败），truncate=1200。147条原始→100条有效（68.0%）。报告256行/17.6KB。社交裂变CPS蝉联第一(7.50)，电商CPS跃居第二(6.70—京东Q3调佣金利好)，外卖CPS垫底(5.30)。全部6赛道≥7条有效数据。手动单脚本模式与并行采集模式通过率相近(68% vs 73%)，单脚本上下文更紧凑，19次搜索即可全覆盖无需二轮聚焦。<br/>>
 >
