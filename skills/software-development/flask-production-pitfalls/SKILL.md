@@ -265,6 +265,38 @@ location ~* \.(env|py|log|cfg|ini|bak|old|swp|sqlite|db)$ {
 
 ---
 
+## Pattern 10: 数据库自动备份静默失败 — pg_dump "permission denied for sequence"
+
+**Symptom**: 每日备份 cron 正常触发，但 `/workspace/backups/db/backup.log` 连续多天全是失败，备份目录最新文件停在失败前一天：
+```
+pg_dump: error: query failed: ERROR:  permission denied for sequence doctor_user_doctors_id_seq
+pg_dump: error: query was: SELECT last_value, is_called FROM public.doctor_user_doctors_id_seq
+```
+
+**Root Cause**: 用 `postgres` 超级用户建新表（如 RBAC 重构新增 `groups`、`doctor_user_doctors`）时，**sequence 的 owner 是 postgres**，应用用户（`gaofang_app`）无 `USAGE/SELECT` 权限 → `pg_dump` 读 sequence 报错中断。备份脚本失败后删除空文件，目录看起来"停在旧日期"而非"报错"，**容易多天不被发现**。必须看 `backup.log` 尾部才能察觉。
+
+**Debug 线索**: 先 `tail -n 20 /workspace/backups/db/backup.log`（不要只看文件列表）；`permission denied for sequence` 明确指向授权问题；对照最近是否用 `su - postgres` 建过表。与 Pattern 1 的"用 postgres 建表默认无权限"警告同源。
+
+**Fix**:
+```bash
+su - postgres -c "psql -d gaofang_v2 -c \"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gaofang_app;\""
+```
+
+**Prevention（防复发）**: 每次 `su - postgres` 建新表都会再踩一次，必须设默认权限：
+```sql
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO gaofang_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO gaofang_app;
+```
+
+**Verification**（修复后手动跑一次 + 三连验证）:
+```bash
+bash /workspace/scripts/backup_gaofang_db.sh
+ls -lah /workspace/backups/db/gaofang_v2_$(date +%Y%m%d).sql   # 文件非空
+tail -3 /workspace/backups/db/backup.log                        # ✅ 备份成功
+grep "^COPY" /workspace/backups/db/gaofang_v2_$(date +%Y%m%d).sql | grep -E "prescription_records|users"
+```
+> ⚠️ pg_dump 默认用 **COPY**（不是 INSERT）导出数据，验证 grep `^COPY`；`INSERT INTO` 计数为 0 是正常的。
+
 ## 完整案例
 
 膏方管理系统复诊模块 2026-08 改版完整过程（时段规则、UPSERT SQL 细节、压测数据、缓存修复链）见 `references/followup-module-overhaul-2026-08.md`。
@@ -272,5 +304,6 @@ location ~* \.(env|py|log|cfg|ini|bak|old|swp|sqlite|db)$ {
 ## References
 
 - 任意文件下载漏洞完整诊断实录（膏方 V2, 2026-08-10）: `references/arbitrary-file-download-gaofang-2026-08-10.md`
+- 膏方 V2 数据库备份架构 + 2026-08 备份静默失败实录: `references/database-backup-gaofang.md`
 - PostgreSQL ON CONFLICT: https://www.postgresql.org/docs/current/sql-insert.html
 - Gunicorn workers/threads: https://docs.gunicorn.org/en/stable/design.html

@@ -145,6 +145,8 @@ if not _is_guest and is_doctor_role() and not (
 ```
    - 验证：默认列表 `total` 应 ≈ 数据库近 90 天 count；带 `start_date=2024-01-01` 后 total 应 = 全部历史 count。
    **医生可看剂型 = 给 doctor 角色分配 `prescription_type:view` 权限点**（只加 view，不加 `doctor:view`——医生列不需要显示其他医生名，数据全是自己的；不加 `data:write`——保持只读）。剂型列显隐和 `_mask_sensitive_fields` 后端隐藏都读这个权限点，只配前端不配后端 = 列显示了但值为 null。
+   **⚠️ doctor:view（谁能看到处方的"医生"列）— 权限点分配实测（2026-08-12）**：`doctor:view` 只控制医生列**可见性**（无权限时后端 `_mask_sensitive_fields` 把 `doctor` 置 null，前端渲染 `(record.doctor || '')` 显示空；"按医生统计"整块隐藏），不控制编辑（医生字段所有角色永久只读）。当前分配：**super_admin / pharmacy_admin / leadership**（领导层需要看医生归属——主人明确指示，2026-08-12 加）；director / group_leader / assistant / **doctor 自己**均无。前端医生列无额外角色判断，随后端返回值自动显示。
+   **⚠️ 改 role_permissions 即时生效，无需重新登录**：`check_permission`（含 `can_view_field`）每次请求**实时查库**（User→roles→permissions joinedload），不读 token 缓存。所以后端加权限点后，接口返回值（如 doctor 字段、统计块）立即变化；token 里的 roles 只用于前端菜单/按钮门控（存在 localStorage，改角色后需重新登录才反映）。"按权限点控制的后端返回值"与"前端角色门控"是两套机制，生效时机不同。
 
 ## 实施顺序
 
@@ -158,7 +160,8 @@ if not _is_guest and is_doctor_role() and not (
 
 - 匿名 GET/POST/DELETE → 401
 - 各角色 get_visible_scope：超管/药局/领导层=None；总监=配置组；组长=本组；医助=自己
-- can_view_field('prescription_type'/'doctor')：仅 admin/pharmacy_admin=True
+- can_view_field('prescription_type')：admin/pharmacy_admin/doctor=True（医生可看剂型）
+- can_view_field('doctor')：admin/pharmacy_admin/leadership=True，其余（含 doctor 自己）False
 - 领导层写接口 → 403
 - GET /api/groups 权限：管理角色可、非管理角色 403
 - 前端登录后 localStorage permissions 从 /api/auth/me 拉取

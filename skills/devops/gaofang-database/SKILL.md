@@ -183,7 +183,47 @@ When the user asks for "上传" data:
 - An Excel file imported in June may contain prescriptions dated in May
 - Always clarify which time dimension the user wants, or default to `created_at` for monthly reports
 
+## Backup & Restore（备份与恢复）
+
+### 自动备份机制
+
+| 任务 | 时间 | 脚本 | 输出 | 保留 |
+|---|---|---|---|---|
+| 数据库每日备份 | 每天 03:00（系统 crontab） | `/workspace/scripts/backup_gaofang_db.sh` | `/workspace/backups/db/gaofang_v2_YYYYMMDD.sql`（pg_dump 纯 SQL） | 15 天自动清理 |
+| 手动按需备份 | 无 | `gaofang-v2/backup_db.py` | `gaofang-v2/backups/gaofang_v2_YYYYMMDD_HHMMSS.sql.gz`（gzip，支持恢复） | 手动清理 |
+| Hermes 配置备份 | 每天 02:00 | `/root/.hermes/scripts/hermes-backup.sh` | `/root/hermes-backup/hermes-backup-*.tar.gz` | 14 天 |
+| Hermes 配置→GitHub | 每天 23:00 | `~/.hermes/scripts/daily-backup.sh` | wangzhaotong-hermes 仓库 | 配置归档 7 天 |
+
+### ⚠️ 备份失败排查（2026-08-07~12 连续 6 天静默失败案例）
+
+**症状**：`/workspace/backups/db/` 缺当天文件；`backup.log` 尾部出现：
+```
+pg_dump: error: query failed: ERROR: permission denied for sequence xxx_id_seq
+```
+**根因**：用 postgres 超级用户新建表（如 RBAC 重构新增 groups / doctor_user_doctors）后，未给应用用户 `gaofang_app` 授权其序列 → pg_dump 报错中断，脚本删掉失败文件，**不告警、静默持续多天**。
+
+**修复**：
+```bash
+su - postgres -c "psql -d gaofang_v2 -c \"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gaofang_app;\""
+su - postgres -c "psql -d gaofang_v2 -c \"GRANT ALL ON ALL TABLES IN SCHEMA public TO gaofang_app;\""
+```
+
+**预防（已配置 2026-08-12，防复发）**：
+```sql
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO gaofang_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO gaofang_app;
+```
+
+**健康检查要点**：备份失败不告警 → 检查时**先看 backup.log 尾部**，不要只看目录里有没有文件；修复后手动跑 `bash /workspace/scripts/backup_gaofang_db.sh` 验证，并用 `grep -c "^COPY"` 确认关键表（prescription_records/users/groups/doctor_user_doctors）数据在内（pg_dump 默认 COPY 格式，`INSERT INTO` 计数为 0 是正常的）。
+
+### crontab 残留清理
+
+宝塔面板解绑后，系统 crontab 可能残留 `/www/server/cron/<hash>` 失效条目（目录已不存在）→ 每晚空跑。清理：先 `crontab -l > /root/crontab_backup_<date>.txt` 备份，再 `crontab -l | grep -v '<hash>' | crontab -`。面板解绑/迁移后应检查 crontab 残留。
+
+详细备份/恢复操作见 `references/backup-and-restore.md`。
+
 ## Reference files
 
+- `references/backup-and-restore.md` — 备份机制全貌、备份失败排查修复、pg_dump 恢复流程
 - `references/excel-cross-verify.md` — Step-by-step workflow for verifying database numbers against a user-provided import Excel file. Use when the user says "你的数据不对" and sends the original Excel.
 - `references/import-skip-rules.md` — Import rule change log: 支付状态=定金跳过规则（2026-07-15）
