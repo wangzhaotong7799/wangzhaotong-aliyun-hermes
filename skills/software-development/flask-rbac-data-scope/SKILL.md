@@ -117,10 +117,11 @@ if is_doctor_role():
 ```
    **⚠️ 医生可见性 = 只看自己名下的处方**（`doctor == 自己的 full_name`），**不包含"该医生名下医助的患者"**——主人明确业务规则：**医院存在一个医助跟 4-5 个医生的事实，归属以处方号对应的医生为准**（`prescription_records.doctor` 字段），不要动态推导医助归属（会把患者分给多个医生）。若需求提到"含医助患者"，先向主人确认归属规则再实现。
    **医生角色只读**：角色权限仅分配 `data:read`（无 `data:write`），仿 leadership 只读；前端操作列 `!roles.includes('doctor')` 才显示编辑按钮，隐藏导入/打印，保留查看/服用提醒/复诊/统计/导出（导出数据范围后端已过滤）。注意 `common.js` 的 `canSeeFollowup` 已含 `hasDoctor`（提醒/复诊菜单自动可见），只需确保编辑入口被门控。
+   **⚠️ 复诊双确认例外（2026-08-13，主人拍板）**：医生对 `update_follow_up_status` **不再 403**——复诊改为「医助+医生双确认」，每次复诊（fu1/2/3）需医助+医生都确认才算成功；医生可确认范围 = **自己 + `doctor_user_doctors` 映射表医生名下**（如丛东海可确认崔玉华/张翠华名下；映射表同时驱动可见性过滤和写校验）。`stop_follow_up` 医生仍 403（停服不纳入双确认）。⚠️ JWT payload 无 full_name，医生归属校验须按 username 查 users 表 + 映射表合并成 `allowed_doctors` 集合。给角色放开写权限前先确认业务规则，别默认"只读角色一律 403"。完整状态机/迁移/验证配方见 `references/followup-dual-confirm.md`。
    **⚠️ 只读角色必须拦截 ALL 后端写接口（不只 PUT）**：曾实测医生 PUT 改医助返回 200（被"非药局角色只能改 assistant+phone"分支放行，未走 leadership 拦截）——只读角色要逐接口 grep 补拦截，拦截点统一写 `is_leadership or is_doctor`：
    - `prescriptions.py`: `update_prescription` (PUT) + `delete_prescription` (DELETE) — 两处 `_get_token_user_info()` 后判 `'leadership' in roles or 'doctor' in roles`
    - `followups.py`: `update_reminder_status` (POST) — 在 `_is_leadership_role()` 处加 `or is_doctor_role()`
-   - `follow_up_management.py`: `update_follow_up_status` + `stop_follow_up`（两处 POST，各有一个手写 `verify_token` 判 leadership 的块，都要加 doctor）
+   - `follow_up_management.py`: `update_follow_up_status` + `stop_follow_up`（两处 POST，各有一个手写 `verify_token` 判 leadership 的块，都要加 doctor）——**⚠️ 2026-08-13 例外：`update_follow_up_status` 医生已放开（双确认，限自己名下患者），`stop_follow_up` 仍 403**，见 `references/followup-dual-confirm.md`
    - `import` 接口有角色白名单（super_admin/pharmacy_admin/director/group_leader/assistant），doctor 不在白名单自动 403，无需改
    - 验证必须用**写接口实测**（登录医生账号 PUT/DELETE → 断言 403），不能只测 GET。
    **验证方法（批量账号过滤断言）**：逐个医生账号登录后 GET `/api/prescriptions?page=1&page_size=5`，断言 `total == SELECT count(*) FROM prescription_records WHERE doctor = full_name`（数据库直查对照），并断言返回记录的 `prescription_type` 非 null（剂型可见）。
@@ -147,6 +148,23 @@ if not _is_guest and is_doctor_role() and not (
    **医生可看剂型 = 给 doctor 角色分配 `prescription_type:view` 权限点**（只加 view，不加 `doctor:view`——医生列不需要显示其他医生名，数据全是自己的；不加 `data:write`——保持只读）。剂型列显隐和 `_mask_sensitive_fields` 后端隐藏都读这个权限点，只配前端不配后端 = 列显示了但值为 null。
    **⚠️ doctor:view（谁能看到处方的"医生"列）— 权限点分配实测（2026-08-12）**：`doctor:view` 只控制医生列**可见性**（无权限时后端 `_mask_sensitive_fields` 把 `doctor` 置 null，前端渲染 `(record.doctor || '')` 显示空；"按医生统计"整块隐藏），不控制编辑（医生字段所有角色永久只读）。当前分配：**super_admin / pharmacy_admin / leadership**（领导层需要看医生归属——主人明确指示，2026-08-12 加）；director / group_leader / assistant / **doctor 自己**均无。前端医生列无额外角色判断，随后端返回值自动显示。
    **⚠️ 改 role_permissions 即时生效，无需重新登录**：`check_permission`（含 `can_view_field`）每次请求**实时查库**（User→roles→permissions joinedload），不读 token 缓存。所以后端加权限点后，接口返回值（如 doctor 字段、统计块）立即变化；token 里的 roles 只用于前端菜单/按钮门控（存在 localStorage，改角色后需重新登录才反映）。"按权限点控制的后端返回值"与"前端角色门控"是两套机制，生效时机不同。
+
+15. **⚠️ 显示被默认过滤排除的记录（"停服可见性"模式，2026-08-13 踩坑）**：需求"列表加停服时间列"时，停服患者默认被**三层过滤**挡掉，只改前端列=空列：
+   - **死参数陷阱**：`include_stopped` 从 `request.args` 读出来了，但下面查询写死 `filter(is_stopped == False)`，参数从未生效。凡读出来的筛选参数必须实际拼进查询，否则是死参数。
+   - **三层过滤必须联动松开**：① SQL 查询层 `filter(is_stopped == False)`；② 内存挑选层（`_pick_active_record` 里 `if rec.is_stopped: continue` 会把停服患者全部跳过、返回 None）；③ 时间窗口层（停服患者历史窗口早已过期，会被"本月+下月上半月"过滤排除）。改法：SQL 用 `or_(is_stopped == True, and_(is_stopped == False, 窗口条件))`；挑选函数加 `allow_stopped` 参数、全部停服时按 `month` 取 max 返回最新一条；窗口过滤对停服记录放行（在服记录保持原窗口规则）。
+   - **新增字段历史回填**：加 `stopped_at` 后，历史 `is_stopped=True` 记录回填 `end_date + 40天`（自动停服理论日）；手动停服写当天。
+   - **⚠️ 第 4 层过滤：日期范围过滤也会灭掉停服患者**：三层之外，列表接口还有"日期范围过滤"（按 fu 计划窗口交集判断），前端默认日期范围=今天~今天+3天 → 停服患者窗口全是过去日期 → 全灭（"勾了包含停服还是 0 人/列没数据"）。修复：`if patient.get('is_stopped'): filtered.append(patient); continue`。诊断法：同一请求带/不带 start_date&end_date 对比 total（本次 331→1671 定位）。
+   - **在服患者也要显示停服时间（口径=领取+料数×30，主人最终纠正）**：`to_dict` 输出 `stop_time`——**停服时间 = end_date（领取时间+料数×30，药吃完那天）**，已停服患者同样显示 end_date。⚠️ 曾误用 end_date+40（系统自动停服跟踪规则）被主人纠正（"停服时间不是=料数×30天吗？"）；40 天只用于「停药时间 = 停服时间 + 40天」。前端「停服时间」列统一渲染 `patient.stop_time`——只用 stopped_at 则所有在服患者全是空。
+   - **前端加列必须同步 colCount**：PC 表格加一列后，JS 里所有硬编码 `? 12 : 10`（空态 colspan 用）要同步改 `13 : 11`，共 5 处（用 replace_all），漏改导致"请先登录/加载中"占不满整行。三轮累计加列（停服时间→领取时间→电话）后最终为 `15 : 13`。
+   - 完整实施记录 + 无需密码的接口验证脚本见 `references/followup-stopped-display.md`。
+
+16. **⚠️ 新增独立页面（PC）菜单门控全量清单（5 处）+ 页面本体 6 步（2026-08-13 在服/停药患者明细页）**：新增任何带权限的页面，common.js 必须同步改 5 处，漏一处则"登录后看不到新菜单"或"未登录也能点"：① 导航元素获取（`getElementById('xxx-nav')`）；② 管理员分支 `canManage` 的 showNav 列表；③ 领导层分支 `hasLeader` 的 showNav 列表；④ 业务角色分支（如 `canSeeFollowup`）的 showNav/hideNav；⑤ 未登录分支的 hideNav 列表。页面本体：`templates/<page-name>.html`（**文件名必须与 pageName 完全一致**，连字符风格——`/page/<page_name>` 路由 `send_from_directory` 直接映射，无 Jinja 渲染）+ `static/js/page-<page-name>.js` 注册 `window.pageLoaders['<page-name>']`（common.js 自动 `?v=Date.now()` 注入，改 JS 无需升版本号）+ index.html 加导航 `<li id="xxx-nav">` 与容器 `<div id="page-xxx">`。⚠️ index.html 本体被 Nginx 缓存 7d，改导航必须提醒主人 Ctrl+F5 强刷。
+   **剂型/医生列权限点分离**：新页面列显隐与后端掩码必须分两个权限点——剂型列=`prescription_type:view`、医生列=`doctor:view`；colCount 按两个权限点分别 +1（`9 + (canSeeSensitive?1:0) + (canSeeDoctor?1:0)`）。复诊管理页曾把两列共用一个 `prescription_type:view`，导致医生列权限与剂型列绑定。
+   **明细页数据模式**：按患者去重取最近疗程（`max(recs, key=lambda r: r.end_date or date.min)`）；新增 `stop_time`（=end_date）、`drug_stop_time`（=end_date+40）；排序在服按 stop_time 升序、停药按 drug_stop_time 降序。\n   **医生下拉（\"所有医生\"搜索）**：专用接口 `/api/follow-up/doctors`——`_apply_scope_filter` 后对 `doctor` 列 DISTINCT 返回（医生角色自然只剩自己，医助/组长按各自可见范围）。不要从分页记录里提取（只含当前页医生，下拉不完整）；与医助 `/api/assistants` 一样要 `@auth_required`。
+   **follow_up_records 加字段 4 处同步**（加 patient_phone 验证过）：① ALTER TABLE + 回填（从 prescription_records 用 `DISTINCT ON (patient_name,gender,age) ... ORDER BY id DESC` 取最新电话；postgres 超级用户执行，备份先行）；② `models/follow_up_record.py` 加 Column + `to_dict()`；③ `_sync_records` UPSERT：INSERT 列、VALUES、`DO UPDATE SET`、params 字典 4 处；④ `_group_patients` 分组 dict 带 `latest.get(...)`。漏 ③④ 则新数据不写新字段。
+   - 完整新增页面配方（页面机制/导出列顺序/无密码验证/colCount 陷阱）见 `references/add-pc-page.md`。
+
+17. **⚠️ 空字符串手机号唯一性误报（用户管理）**：`User.phone == ''` 会匹配库中所有空串手机号用户 → 编辑某个空手机号用户（前端提交 `phone:''`）时误报「手机号已被其他用户使用」，而库里查无重复。修复：`phone_val = (data['phone'] or '').strip()`，空值**跳过占用检查**并**存 NULL 而非 ''**；`register_user` 同样规范化 `(phone or '').strip() or None` 防新脏数据。历史脏数据清理：`UPDATE users SET phone = NULL WHERE phone = '';`。诊断路径：报占用但 `GROUP BY phone HAVING count(*)>1` 为空 → 查 `phone = ''` 的空串用户（psql 中 NULL 与 '' 显示都是空白，用 `phone IS NULL` / `phone = ''` 区分）。
 
 ## 实施顺序
 
