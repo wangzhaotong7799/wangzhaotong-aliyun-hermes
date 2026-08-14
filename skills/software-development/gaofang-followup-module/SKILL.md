@@ -122,6 +122,32 @@ PWA 在 `static/mobile/`，与 PC 完全独立：
 - 实现：for 循环 setattr 后、commit 前，`session.query(PrescriptionRecord).filter(id != 当前, date==, patient_name==, gender==, age==)` + 手机号匹配（非空精确；空值用 `or_(phone.is_(None), phone=='')` 否则 NULL≠'' 漏配）→ `.update({'assistant': new}, synchronize_session=False)`，记 logger 留痕。
 - 匹配键用 `data.get('date', record.date)`（新值优先，改其他字段时按新键联动）。
 
+### ⚠️ 医助联动跨表同步（2026-08-14 修复，主人报 Bug）
+- **问题**：改处方医助只同步 prescription_records 内部，`follow_up_records`（复诊表）的 assistant 不同步 → 复诊列表医助还是旧的。
+- **提醒（reminders）无独立表**：实时从 prescription_records 计算，改完自动生效，无需处理。
+- **修复**：prescriptions.py PUT 联动块追加 `FollowUpRecord` 同步——按 `patient_name+gender+age`（+手机号：非空时匹配「同号 OR 复诊表电话为空」，避免同名患者误改且不漏历史空电话记录）`.update({'assistant': new})`。
+- 日志 detail 增加 `followup_synced_count` 字段（区别于处方内部 `synced_count`）。
+- **存量回填 SQL**（患者最新疗程处方医助 → 复诊表；先用宽口径 count 会得到几百条假阳性，**精确口径要按最新疗程 LATERAL 子查询**，宽口径含历史疗程差异不算 bug）：
+```sql
+UPDATE follow_up_records fu SET assistant = sub.cur_assistant, updated_at = now()
+FROM (SELECT fu2.id, (SELECT pr.assistant FROM prescription_records pr
+      WHERE pr.patient_name=fu2.patient_name AND pr.gender=fu2.gender AND pr.age=fu2.age
+        AND pr.assistant IS NOT NULL AND pr.assistant != ''
+      ORDER BY pr.pickup_date DESC NULLS LAST, pr.id DESC LIMIT 1) AS cur_assistant
+      FROM follow_up_records fu2) sub
+WHERE fu.id = sub.id AND fu.assistant IS DISTINCT FROM sub.cur_assistant;
+```
+- 2026-08-14 实测：宽口径 329 条 → 精确口径 32 条（21 患者）→ 回填后归零。
+
+### ⚠️ 医助/电话联动跨表同步（2026-08-14 扩展：电话也要同步）
+- 主人追加要求：**添加或更改电话号码也要像医助一样跨表同步**。
+- 关键差异（与医助不同）：**电话是患者属性，匹配键不含电话本身**——改号后按旧号匹配会漏改。电话联动按「姓名+性别+年龄」匹配同患者**所有**记录（不限日期），同步 prescription_records 内部 + follow_up_records。
+- **顺序**：电话联动放医助联动**之前**——同一次请求同时改电话+医助时，医助匹配（含手机号条件）能基于新电话，避免匹配失败。
+- **空值规范**：`patient_phone` 传空串 `''` → 转 `None`（与 users.phone 一致，主记录和联动记录都存 NULL，不混 `''`）；联动代码里 `data[json_key] = None` 同步改写，保证联动用 None。
+- 日志 detail 增加 `patient_phone` 变更的 `synced_count`（处方内部）+ `followup_synced_count`（复诊表）。
+- 实测三场景全过：改号（处方2+复诊同步）、清空电话（三处统一 NULL）、日志记录正确。
+- 提醒（reminders）无独立表，实时算，无需同步。
+
 ## 统计数字差异排查（角色数据范围，通常不是 bug）
 
 主人报「两个账号统计的在服患者不一样」（如 yaoju002=323 vs zj001=321）时：
@@ -146,6 +172,27 @@ with app.app_context():
 - 测试 INSERT `prescription_records` 必须给 `prescription_id` 和 `doctor`（都有 NOT NULL 约束，缺一报 NotNullViolation；`follow_up_records` 无此约束）。
 - 重启：`kill -HUP $(systemctl show gaofang-v2-fusion -p MainPID --value)`（HUP 热重启，不中断请求）；`find . -name __pycache__ -type d -exec rm -rf {} +` 清理缓存。
 - 前端 JS 动态加载带 `?v=Date.now()` 无需升版本号；**改完提醒主人 Ctrl+F5 强刷**（Nginx /static/ 缓存 7d immutable）。
+
+## 操作审计日志（2026-08-14 新增）
+
+- 新表 `operation_logs`（模型 `models/operation_log.py`，API `api/v1/operation_logs.py`，蓝图 `operation_logs_bp` 挂 `/api`）。
+- 表字段：`operator_username`（JWT 取）、`operator_full_name`（查 users）、`action`、`target_type`、`target_id`、`patient_name`、`detail`（JSON 字符串）、`ip_address`（兼容 X-Forwarded-For）、`created_at`。
+- 写入：`log_operation(action, target_type, target_id, patient_name, detail, session)` —— **不 commit**，由调用方业务 commit 同事务提交（保证日志与业务同生共死）。埋点位置：
+  - `PUT /api/prescriptions/<id>` → `action='update_prescription'`，detail 为字段变更 `{field: {old, new}}`（setattr 前收集旧值，assistant 空串不记，联动更新数量附加 `synced_count`）
+  - `DELETE /api/prescriptions/<id>` → `action='delete_prescription'`，detail 记录删除前完整快照
+  - `POST /api/follow-up/update` → `action='followup_confirm'/'followup_revoke'`，detail 含 `confirm_role`（assistant/doctor）
+  - `POST /api/follow-up/stop` → `action='stop_followup'`，detail 含 `stopped_at`、`record_count`、`scope`
+- 查询：`GET /api/operation-logs?operator=&action=&patient_name=&start_date=&end_date=&page=&page_size=`（需登录，返回 total/data 分页）。
+- ⚠️ **建表竞态坑（必踩）**：gunicorn 多 worker 首次启动时并发执行 `init_db→db.create_all()`，多个 worker 同时 CREATE TABLE 会报 `UniqueViolation: pg_type_typname_nsp_index (operation_logs_id_seq)` → worker crash → systemd auto-restart 循环。**解法**：新表上线时先手动跑一次 `python -c "from app import app; app.app_context().push(); db.create_all()"`（单进程）或直接 SQL 建表，再 `systemctl restart gaofang-v2-fusion`。表已存在后 create_all 跳过，不再冲突。
+- 测试套路：`generate_token` + `app.test_client()`，PUT/DELETE 验证日志落库，测完 DELETE 业务记录 + 日志记录双清理（注意 DELETE 动作本身会产出一条 delete_prescription 日志，清理日志时别漏）。
+
+## 操作日志前端页面（2026-08-14）
+
+- PC 页面：导航「📜 操作日志」`operation-logs-nav`（**仅管理员 canManage=super_admin/pharmacy_admin 可见**，common.js 4 分支都要加：元素获取、canManage showNav、非管理员 hideNav、未登录 hideNav）。
+- `templates/operation-logs.html` + `static/js/page-operation-logs.js`（`window.pageLoaders['operation-logs'] = init`），懒加载自动注入无需改 index.html 的 script 标签，但 index.html 要加 `<li id="operation-logs-nav">` + `<div id="page-operation-logs">`。
+- 筛选：操作人/动作下拉（update_prescription/delete_prescription/followup_confirm/followup_revoke/stop_followup）/患者/日期范围；分页 20 条；顶部合计卡（紫色 #6f42c1 风格）。
+- 明细渲染：`formatDetail()` 对 update_prescription 的 `{field:{old,new}}` 结构做「旧值红→新值绿」展示，联动数量显示 `(联动N条)`；其他动作键值对展示。**新增 action 类型时 ACTION_NAMES 映射和下拉选项要同步加**。
+- 验证：JS 引用的 DOM ID 必须与模板逐一对应（getElementById 提取比对脚本可复用）；`node --check` 查语法；浏览器访问 39.107.78.58 可能被 ERR_BLOCKED_BY_CLIENT，用 curl 验证模板/JS/API 200 即可。
 
 ## 相关技能
 

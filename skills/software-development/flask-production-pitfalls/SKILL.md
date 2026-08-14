@@ -297,9 +297,24 @@ grep "^COPY" /workspace/backups/db/gaofang_v2_$(date +%Y%m%d).sql | grep -E "pre
 ```
 > ⚠️ pg_dump 默认用 **COPY**（不是 INSERT）导出数据，验证 grep `^COPY`；`INSERT INTO` 计数为 0 是正常的。
 
+## Pattern 11: Gunicorn 日志中 HUP reload 与 max-requests SIGTERM 轮换的区分（误报 worker 崩溃）
+
+**Symptom**: 巡检 gunicorn-error.log 看到大量 `[ERROR] Worker (pid:X) was sent SIGTERM!`，疑似 worker 反复崩溃/重启。健康检查报告容易把「频繁 reload」当成异常上报。
+
+**Root Cause — 两类信号长得像、含义完全不同**:
+- **max-requests 正常轮换（良性，最常见）**: gunicorn 配置 `--max-requests 1000 --max-requests-jitter 200` 时，worker 处理 800-1200 请求后自动退出，日志表现为**密集的 `Worker ... was sent SIGTERM!` + `Worker exiting` 簇**（多个 worker 几乎同时）。健康的日子天天如此，**不是 reload、不是崩溃**。
+- **真 reload（运维/调度驱动）**: 日志中的 `[INFO] Handling signal: hup` + `[INFO] Hang up: Master` + `Booting worker with pid` 才是 reload。来源是定时 cron（如每日 06:00 `gaofang-gunicorn-daily-reload`）或手动 `kill -HUP` / systemctl reload。**`Booting worker` 后跟着一批 SIGTERM 是 reload 的旧 worker 清理，也不是崩溃**。
+
+**Debug 线索**: 数 reload 次数**只数 `Handling signal: hup`**，不要数 SIGTERM。巡检时若发现**非定时时间点**的 hup（如白天 13:10、16:23、16:55），先查：① 有没有对应 cron（`hermes cron list` / crontab）；② 当天有无 SSH 登录（`last`）。两者都没有 → 大概率主人手动操作（宝塔面板重启/调试），**上报前先确认，不要当成异常/恶意脚本**。
+
+**Verification**: `grep -c "Handling signal: hup" gunicorn-error.log` 数每日 reload 次数；对照 cron 计划看是否有计划外 reload。
+
+**实录**: 2026-08-13 膏方 V2 出现 3 次计划外 hup（13:10、16:23、16:55）+ 1 条 WORKER TIMEOUT（13:12，reload 边界旧 worker 清理超时，良性非 OOM）。完整判定流程见 `references/gunicorn-reload-vs-sigterm-2026-08-14.md`。
+
 ## 完整案例
 
 膏方管理系统复诊模块 2026-08 改版完整过程（时段规则、UPSERT SQL 细节、压测数据、缓存修复链）见 `references/followup-module-overhaul-2026-08.md`。
+Gunicorn 日志解读（HUP reload vs max-requests SIGTERM 轮换，避免误报 worker 崩溃）见 `references/gunicorn-reload-vs-sigterm-2026-08-14.md`。
 
 ## References
 
