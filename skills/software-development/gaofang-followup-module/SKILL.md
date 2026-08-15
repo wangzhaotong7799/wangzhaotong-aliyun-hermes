@@ -148,6 +148,37 @@ WHERE fu.id = sub.id AND fu.assistant IS DISTINCT FROM sub.cur_assistant;
 - 实测三场景全过：改号（处方2+复诊同步）、清空电话（三处统一 NULL）、日志记录正确。
 - 提醒（reminders）无独立表，实时算，无需同步。
 
+### 医生登录后医助下拉框为空（2026-08-15 修复）
+- **问题**：医生登录复诊页，`follow-up-assistant` 下拉框无任何选项。
+- **根因**：`GET /api/assistants`（prescriptions.py）按 `get_visible_scope()` 过滤，但**对医生角色错误地按 `assistant` 字段匹配 scope**——而医生 scope 是医生姓名列表（自己+映射表医生），与 assistant 字段交集为空 → 空列表。复诊列表 `_apply_scope_filter` 对医生是按 `model.doctor.in_(scope)` 过滤的，接口不一致。
+- **修复**：`get_assistants` 里 `if is_doctor_role(): query = query.filter(PrescriptionRecord.doctor.in_(scope))`，其他角色保持 assistant 匹配。PWA 共用此接口自动受益。
+- **配套**：复诊列表增加患者姓名搜索——`GET /api/follow-up` 支持 `patient_name` 参数（**Python 层过滤**：中文子串 + 拼音全拼 + 拼音首字母三者匹配，如"张"/"zhang"/"zbx"都能搜到张滨秀；**不要用 SQL ilike**——拼音会匹配不到。过滤放在 result 分组之后、日期过滤之前，分页 total 才正确）；模板加 `#follow-up-patient-name` 输入框 + JS 加载/导出都传参 + change/回车触发。**位置：放在时间段（开始/结束日期）之后**（主人 2026-08-15 明确要求，最初放最前面被纠正）。
+
+## 筛选栏 UI 标准（2026-08-15 主人明确，全系统 PC 页面通用）
+
+主人对 PC 页面筛选栏有统一审美标准，改任何页面的筛选区（复诊/领取记录等）直接照此执行，**不要自己另定宽度/布局**：
+
+- **宽度统一 145px**：所有筛选控件（输入框/下拉框/搜索按钮）`style="width:145px;"`，以开始日期框为标准。
+- **布局**：`<div class="row g-2 align-items-center">` + 每控件包 `<div class="col-auto">`（**不要用 `col-md-3` 响应式栅格**——领取记录页原来是它，主人嫌宽度不齐）。
+- **样式类**：`form-control form-control-sm` / `form-select form-select-sm` / `btn btn-primary btn-sm`。
+- **控件顺序**（复诊页最终版）：开始日期 → 结束日期 → 患者姓名 → 复诊状态 → 医助 → 包含停服 → 搜索按钮。
+- **已按此标准改造的页面**：复诊管理（followup.html，2026-08-15）、膏方领取记录（prescriptions.html，2026-08-15，8 个控件含搜索按钮全 145px）。
+- 纯改模板 HTML 实时生效（Flask 模板每次请求渲染），无需重启 gunicorn；但 **Nginx /static/ 7d immutable 缓存 → 提醒主人 Ctrl+F5 强刷**。
+
+## ⚠️ 页面模板双轨制：内联 vs 动态加载（2026-08-15 踩坑）
+
+**「膏方领取记录」（prescriptions）是唯一例外——模板内联在 `static/index.html` 第 70 行起**（注释"模板HTML直接内联"），common.js 第 355 行 `if (pageName !== 'prescriptions')` 跳过懒加载，永远用 index.html 里的 HTML。**改 `templates/prescriptions.html` 是改死代码，页面毫无变化！**
+
+- 其他所有页面（followup/reminders/active-patients/stopped-patients/statistics/admin-*/operation-logs）都是懒加载：容器为空 `<div id="page-xxx">`，靠 `fetch('/page/xxx')` 从 `templates/xxx.html` 实时拉取（后端 send_from_directory，`Cache-Control: no-cache`，改动即生效）。
+- 改 prescriptions 页面的正确姿势：改 `static/index.html` 内联块 → **Nginx 直服首页（`location = /` try_files，无 no-cache 头）→ 主人必须 Ctrl+F5 强刷**（浏览器启发式缓存旧 index.html）。
+- 排查"页面没变化"套路：先 `grep -n "page-xxx" static/index.html`——容器里有内容=内联（改 index.html），容器为空=动态（改 templates/xxx.html）。curl 验证用 `python urllib`（rtk 输出会截断到 582B 误导 grep！`curl -s | grep` 结果不可信）。
+
+### PWA 搜索后按钮失效（2026-08-15 修复，主人报"点击医生确认没反应"）
+- **根因**：PWA 复诊页（static/mobile/js/page-followup.js）搜索是**本地过滤**——`applySearch()` 里 `listEl.innerHTML = renderCards(getVisibleList())` 重渲染卡片，但**没重新绑定 `.card-actions button` 的 click 事件**（绑定只在 `loadList()` 成功回调里做一次）。搜索后所有确认/撤回按钮都变死按钮，点击无任何反应。
+- **修复**：按钮绑定抽成 `bindCardActions(containerEl)` 独立函数，`loadList()` 和 `applySearch()` 重渲染后都调用。
+- **PC 端配套**：`updateFollowUpStatus` 失败时前端只 `console.error` 静默——确认按钮回调加 `.catch` → `alert('操作失败：' + error.message)` + 恢复按钮 disabled，避免"没反应"假象。
+- **排查"点按钮没反应"套路**：先看是不是**重渲染后未重新绑定事件**（搜索/筛选/分页后按钮失效）；再看前端 catch 是否静默吞掉 403/500。
+
 ## 统计数字差异排查（角色数据范围，通常不是 bug）
 
 主人报「两个账号统计的在服患者不一样」（如 yaoju002=323 vs zj001=321）时：
