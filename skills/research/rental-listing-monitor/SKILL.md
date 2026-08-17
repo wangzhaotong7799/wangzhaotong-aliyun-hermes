@@ -56,11 +56,23 @@ metadata:
   - 房型：`([\d]+室[\d]+厅[^<"]{0,50})`
 - 反爬通用对策：`curl` 带移动端 UA（iPhone Safari）；`-L` 跟随重定向；验证用 `python urllib` 避免 rtk 输出截断误导（`curl -s | grep` 结果不可信，rtk 会把 stdout 截到 ~582B）。
 
-## 下一步（主人确认后执行）
+## 实现状态（2026-08-17 更新）
 
-1. **安居客单源版先上线**（1 小时可交付）：cron 脚本抓 `m.anjuke.com/hrb/community/477940/rent/` → SQLite 指纹库 → 新房源推飞书。→ 实现后看 `references/` 里的验证数据。
-2. **品阁**：等主人抓包配合，或找品阁在平台的店铺页。
-3. **贝壳**：最后用 playwright 无头浏览器，评估 1.8G 内存可行性。
+- ✅ **安居客单源版已上线**（2026-08-15/16 实施，系统 crontab 每 30 分钟轮询）：
+  - 脚本：`~/.hermes/scripts/monitor_gelan_rent.py`（`--init` 初始化指纹库 / `--test` 打印当前房源不写库 / 默认 run 轮询推新房源）
+  - 指纹库：`~/.hermes/rent_monitor/gelan_yuntian.db`（表 houses，house_id 主键 + 内容指纹双层去重，2026-08-17 时 67 套）
+  - 日志：`~/.hermes/rent_monitor/monitor.log`
+  - ⚠️ **监控挂在系统 crontab，不是 Hermes cronjob**——查状态必须 `crontab -l | grep rent`，`cronjob list` 看不到！
+  - 常见误判：主人问「没有新的房源？」先查日志尾 + 最近 first_seen 入库时间，无新增 ≠ 监控挂了，可能确实没新房源上架。
+- ⏳ **品阁**：等主人抓包配合，或找品阁在平台的店铺页。
+- ⏳ **贝壳**：最后用 playwright 无头浏览器，评估 1.8G 内存可行性。
+
+## 检查监控状态（主人问"有没有新房源"时的标准流程）
+
+1. `crontab -l | grep rent` — 确认系统 crontab 任务在（每 30 分钟一轮）
+2. `tail -20 ~/.hermes/rent_monitor/monitor.log` — 看最近轮次（"无新房源,静默"=正常，别当故障）
+3. `sqlite3 ~/.hermes/rent_monitor/gelan_yuntian.db "SELECT house_id,price,room,first_seen FROM houses ORDER BY first_seen DESC LIMIT 10;"` — 最近入库时间
+4. 汇报口径：库内总套数 + 最近一条 first_seen；无新增时说明「监控正常、确实没新房源上架」，别让主人以为监控挂了
 
 ## 相关技能
 

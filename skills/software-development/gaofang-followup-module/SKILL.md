@@ -50,6 +50,21 @@ metadata:
 - **前端 PWA**：`fuStatusBadge` 双状态点 + `fuActionButton` 按 `Store.hasRole('doctor')` 显示「医生确认N/医助确认N」按钮；`Store.isLeadership()` 不渲染按钮。
 - 统计/排行口径不变（`fuX_status == '已复诊'` 由 update 接口维护正确）。
 
+## 统计分析页「医生复诊工作量」（2026-08-17 新增）
+
+主人要求统计分析页「医生工作量」改为「医生复诊工作量」：按医生分组统计复诊确认工作量，粒度可选按日/按月，单确认/双确认都显示。
+
+- **接口**：`GET /api/stats/doctor-followup-performance`（api/v1/stats.py），参数 `granularity=day|month` + `date`（day=YYYY-MM-DD / month=YYYY-MM，默认今天/本月）。
+- **统计口径**（Python 层遍历，不用 SQL 聚合）：
+  - 双确认：`fuX_assistant_date` 与 `fuX_doctor_date` 都有 → 归属日期 = `max(a,d)`（较晚确认日）
+  - 单确认：仅一方有日期 → 归属日期 = 已确认方日期
+  - 按 `record.doctor` 分组（`_apply_scope_filter` 数据范围过滤），返回 `data: [{doctor, single_count, double_count}]` 按合计降序
+- **权限**：无 `doctor:view` → 403（与原 doctor-performance 一致）；医助/无权限角色 403。
+- **前端**：`templates/statistics.html`（懒加载模板，改完即时生效）+ `static/js/page-statistics.js`（**静态 JS 改完要主人 Ctrl+F5 强刷**）。
+  - 卡片「医生复诊工作量」+ 粒度下拉（按日/按月）+ 日期输入（date/month 切换显示）+ 查询按钮
+  - 堆叠柱状图：双确认蓝 + 单确认橙，柱顶标「双N/单N」，悬停 tooltip 显示合计；datalabels 非 0 才显示避免叠 0
+- **SQL 交叉验证坑**：双确认按 `GREATEST(fuX_assistant_date, fuX_doctor_date)=某日` 计数（**不是**两个都=某日！归属=max），用 `psql -f /tmp/xxx.sql` 传 SQL 文件避免引号嵌套地狱。
+
 ## ⚠️ 停服患者"查得到但列表不显示"的三层过滤陷阱
 
 用户报"停服时间列没数据/停服患者看不到"时，按序排查（曾全部踩中）：
@@ -189,6 +204,8 @@ WHERE fu.id = sub.id AND fu.assistant IS DISTINCT FROM sub.cur_assistant;
 4. 排查方法：实测各账号 `GET /api/follow-up/statistics` + `patients?type=active` 的真实返回（不要自己模拟 scope，`get_visible_scope` 依赖请求上下文 g.user_id，独立脚本模拟容易算错），再用接口返回的患者键集合做差集定位。
 
 ## 验证方法（无密码也可测）
+
+- **跑脚本必须用 venv38 绝对路径**：`/workspace/projects/drug-distribution-system/gaofang-v2/venv38/bin/python script.py`——`source venv38/bin/activate` 在非交互 shell 里可能不生效/环境错乱，导致 `python3` 落到系统解释器报 `ModuleNotFoundError: No module named 'flask'`。直接调 venv 绝对路径最稳。
 
 ```python
 # 项目 venv38，直接用 generate_token 绕过登录（auth.py 有 generate_token(user_id, username, roles)）

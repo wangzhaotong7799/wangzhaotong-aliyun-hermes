@@ -43,11 +43,15 @@ Multiple domain cron jobs (电商/自媒体/CPS) may run at staggered times into
 - Before collecting, `ls -la --time-style=full-iso` the data dir and check file mtimes to distinguish your run's artifacts from siblings.
 - Use DOMAIN-SPECIFIC filenames (e.g. `tianwang_selfmedia_20260810.md`, `quality_gate_report_selfmedia_20260810.md`) — never bare `quality_gate_report_202608.md`.
 - When writing the final report, a sibling subagent warning ("file was modified by sibling subagent") may fire; verify your content with read_file/wc after write — it is usually a false positive from concurrent runs, not data loss.
+- **The FINAL report file name collides too** (validated 2026-08-17, CPS域): `report_YYYYMM.md` is a shared name across domains in the same month — 自媒体域 had already written `report_202608.md` before the CPS域 run finished, and overwriting it would destroy the other domain's deliverable. Use `report_<domain>_YYYYMMDD.md` (e.g. `report_cps_20260817.md`) for the final report as well. Unique descriptive names beat the uniform naming convention whenever domains share a `data/` directory.
 
 ## Exa collection specifics
 - **truncate=1200 minimum** (250-500 loses date lines → pass rate collapses to 20-30%)
 - **Capture `publishedDate` explicitly** — best year source when present (`r.get('publishedDate','')`, check first 4 chars)
 - Year detection fallback chain: publishedDate > URL date pattern `/(20[12]\d)[/\-]` > title year > body `2026年` text (first ~600 chars)
+- **Platform-homepage rule**: URLs on official platform domains with current operating info (规则中心/创作激励/帮助中心, e.g. `douyin.com/rule/`, `bilibili.com/read/cv*` rules pages, `tiktok.com/creator-academy`) → mark `data_year=current year`, `year_source=platform_current`. Cheap zero-API recovery (3 records recovered this way on 2026-08-17). **In English/vendor-documentation-heavy domains (跨境CPS/联盟营销: Shopee Seller Education `seller.shopee.sg`/`help.shopee.com.my`, Amazon Associates Central `affiliate-program.amazon.com`) platform_current is the PRIMARY recovery lever, not a minor assist** — 14 records recovered via domain match in the 2026-08-17 CPS run, lifting 跨境CPS from 4 to 12 valid records (publishedDate is rare on such pages; the 36kr-ID heuristic is useless there).
+- **web_extract manual verification — final fallback** (validated 2026-08-17): when all heuristics fail on a few remaining unknown URLs, fetch each page with `web_extract` and read the real publish date. Resolves BOTH ways: recovers (课堂街 page showed "时间：2026年01月26日" → 2026; QuestMobile snippet text contained "2026本地生活消费洞察报告" → 2026) and definitively rejects (新抖 "新抖服务2021-12-09", 晰数塔 2021-11-22 / 2022-03-10, 新红 "新红数据2025-10-09", Keep×新榜 report → all <2026). Cost: a few page fetches, zero API calls.
+- **⚠️ Report-download-site trap**: on aggregator sites (sgpjbg.com, scribd.com, report-warehouse pages), the displayed date is often the report's DATA vintage, not the upload date (Keep×新榜 健身报告 showed "数据来源：Keep，2021年12月" → the report IS 2021, not 2026). Judge by the data references inside, not the page timestamp. Pages with NO visible date (e.g. 鸟哥笔记 article) must be rejected, never guessed.
 - Expected first-round pass rates by track type: specific tracks (短剧/数码) 70-90%; generic tracks (母婴/美食/美妆) 40-70% with higher noise
 - Write the search script with write_file and run `python3 /tmp/script.py`; never inline curl|python pipes (quoting breaks). Output to an ABSOLUTE path (subagent working dirs differ from parent).
 
@@ -61,8 +65,36 @@ Multiple domain cron jobs (电商/自媒体/CPS) may run at staggered times into
 ## Handoff to downstream stages
 Pass the quality gate report + filtered dataset to scoring with: per-track relevant counts, the year range covered (e.g. "2026年1-8月公开信息"), and confidence flags. Never let noise records reach the scoring matrix — one irrelevant "valid" record can swing a track's score by 0.5+.
 
-## Reference: worked session
+## ⚠️ Pitfall #3: Exa text corrupts markdown fenced JSON blocks (validated 2026-08-17, 电商域 group2)
+Exa `text`/`textSnippet` content routinely contains markdown code-fence markers (```) and newlines. When the collection script embeds raw `text_snippet` inside a ` ```json_data_block ``` ` fenced block in the .md output, the inner ``` terminates the fence EARLY → the JSON string is truncated mid-value → output file unparseable. Deceptive part: the script exits 0 and prints "✅ 已保存", so nothing looks wrong until you try to parse.
+
+**Mitigation (mandatory for every Exa → markdown pipeline):**
+1. Sanitize before writing to the file: `text_snippet = text[:300].replace("\n", " ").replace("```", "'")` — do the same for `title`. (`json.dumps` already escapes quotes/newlines correctly; the fence backticks are the only thing that breaks the markdown CONTAINER.)
+2. After any run, ALWAYS validate the artifact with python3: regex-extract the `json_data_block` fenced block and `json.loads` it. Exit code 0 does NOT mean the output is parseable. (Note: `read_file` may misreport such .md as "binary" — use python3 instead.)
+3. When parsing stats, use the generator's ACTUAL field names — don't guess. This pipeline uses `data_year` with values `"2026"`/`"unknown"` (valid = `!= "unknown" and int(...) >= 2026`), NOT `date`/`year`/`publishedDate`. Reading the wrong field yields 0 valid records and a false 0.0% pass rate.
+4. Cross-check parsed totals against the script's own printed stats (e.g. `=== 第2组统计: 54/61 = 88.5%`) — they must match exactly. The script prints these; the parse is verification, not discovery.
+
+## ⚠️ Pitfall #4: verify weighted-score arithmetic before ranking (validated 2026-08-17, 电商域)
+Even after a clean quality gate, the downstream scoring matrix can carry plain arithmetic errors. Observed: 社交电商 written as 6.25 but true weighted sum `7×0.30+6×0.25+5×0.20+6×0.15+7×0.10 = 6.20` — a 0.05 error that flipped its rank from #3 to #2 vs the adjacent track. Wrong totals silently propagate into the report's ranking table and the final summary.
+**Mitigation (mandatory before handoff to report writing):**
+1. Recompute every weighted total programmatically or by hand: `Σ(维度分 × 权重)` per track, using the declared weights (e.g. 电商域: 0.30/0.25/0.20/0.15/0.10).
+2. Sort by the RECOMPUTED total — do not trust the order in which rows were typed into the matrix.
+3. If any total changed, update rank order AND the vs-previous-month comparison table together (they were inconsistent in the observed run).
+4. Echo the recomputed totals into the report's ranking table as the single source of truth.
+
+## ⚠️ Pitfall #5: rewrite scripts DROP the JSON fence entirely (validated 2026-08-17, 自媒体域)
+Pitfall #3 covers Exa text corrupting the fence from inside. A SECOND, distinct failure: recovery/gate scripts that rewrite the collected .md via `content[:match.start()] + new_json + content[match.end():]` **delete the ` ```json_data_block ``` ` fence markers themselves** (the regex match includes the fences), so downstream code that parses via `re.search(r'```json_data_block\n(.*?)\n```')` gets `AttributeError: 'NoneType'`. Symptom is silent: the rewrite "succeeds", the file just no longer parses.
+
+**Mitigation:**
+1. Parse robustly, never depend on fence regex when the file may have been rewritten: `idx = content.index('## 详细数据')` → `jstart = content.index('{', idx)` → `jend = content.rindex('}') + 1` → `json.loads(content[jstart:jend])`.
+2. When rewriting, rebuild the container explicitly: `"## 详细数据（JSON数据块）\n\n```json_data_block\n" + new_json + "\n```\n"`.
+3. Combine with Pitfall #3's validation step: always `json.loads` the final artifact after ANY transformation pass (merge, recovery, focus-补采), not just after collection.
+
+## Reference: worked sessions
 `references/selfmedia-20260810-session.md` — concrete numbers, noise examples, and the disambiguating keyword recipes that recovered 母婴/美食 (2026-08-10 自媒体域 8-track run).
+`references/exa-md-json-corruption-20260817.md` — the code-fence corruption symptom→diagnosis→fix transcript and the parse/verify recipe (2026-08-17 电商域 group2 run).
+`references/selfmedia-20260817-session.md` — fence-loss-on-rewrite incident, web_extract date-verification verdicts, and the focused-search rescue of a weak track (2026-08-17 自媒体域 8-track run).
+`references/cps-20260817-session.md` — CPS 6-track run: platform_current as the dominant recovery lever in cross-border/vendor-doc domains (跨境CPS 4→12), re-confirmed fence-loss-on-rewrite, final-report filename collision (`report_202608.md` taken by 自媒体域), and CPS policy signal list (2026-08-17).
 
 ## Relationship to other skills
 - `wealth-analyst` (user-owned, multi-agent-team): full orchestration SOP for the user's weekly domain reports. Its year-validation documentation is extensive; the RELEVANCE gate (this skill's Pitfall #1) is the gap it does not cover. Recommend adding the relevance review step to that SOP.
