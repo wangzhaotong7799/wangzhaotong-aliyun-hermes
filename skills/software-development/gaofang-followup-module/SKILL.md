@@ -169,14 +169,33 @@ WHERE fu.id = sub.id AND fu.assistant IS DISTINCT FROM sub.cur_assistant;
 - **修复**：`get_assistants` 里 `if is_doctor_role(): query = query.filter(PrescriptionRecord.doctor.in_(scope))`，其他角色保持 assistant 匹配。PWA 共用此接口自动受益。
 - **配套**：复诊列表增加患者姓名搜索——`GET /api/follow-up` 支持 `patient_name` 参数（**Python 层过滤**：中文子串 + 拼音全拼 + 拼音首字母三者匹配，如"张"/"zhang"/"zbx"都能搜到张滨秀；**不要用 SQL ilike**——拼音会匹配不到。过滤放在 result 分组之后、日期过滤之前，分页 total 才正确）；模板加 `#follow-up-patient-name` 输入框 + JS 加载/导出都传参 + change/回车触发。**位置：放在时间段（开始/结束日期）之后**（主人 2026-08-15 明确要求，最初放最前面被纠正）。
 
+## 复诊页新增下拉筛选（按医生，2026-09-03）— 通用链路
+
+主人要求复诊管理页加「按医生」搜索，全链路可复用为「给复诊列表加任意下拉筛选」模板（先备份三件套到 `backups/<name>_<date>/`）：
+
+1. **后端** `api/v1/follow_up_management.py` 的 `GET /api/follow-up`：读参数 `doctor = request.args.get('doctor')`，在 `_apply_scope_filter` 之后加 `if doctor: rec_query = rec_query.filter(FollowUpRecord.doctor == doctor)`（SQL 层精确匹配）。
+2. **模板** `templates/followup.html`：医助下拉前插 `<select id="follow-up-doctor" class="form-select form-select-sm" style="width:145px;"><option value="">所有医生</option></select>`。
+3. **JS** `static/js/page-followup.js`：
+   - `loadFollowUpPatients()`（加载）与 `exportFollowUpData()`（导出）各有一段「读控件值 + params.append」几乎相同的代码 → 两处都要改时用一次 patch + `replace_all=True`（old/new 完全一致）。
+   - 新增 `loadDoctors()`：仿 `loadAssistants()`，fetch `/api/follow-up/doctors` 填充下拉（该接口已存在，`_apply_scope_filter` 内 DISTINCT doctor，**不会越权**，医助角色看到的是自己名下患者的医生集合）。
+   - `bindEvents()` 的「筛选变化自动搜索」change 监听数组加 `'follow-up-doctor'`；pageLoader init 顺序 `bindEvents(); loadAssistants(); loadDoctors(); loadFollowUpPatients(); ...`。
+4. **字段类型决定过滤层级**：精确匹配字段（doctor/assistant）→ SQL 层 filter（放在窗口过滤与 `_apply_scope_filter` 之后）；模糊文本（patient_name 中文/拼音）→ Python 层（分组去重后、日期过滤前）。
+
+**⚠️ 验证「筛某医生 total=0」不一定是 bug**：默认窗口过滤（本月+下月上半月）先于 doctor 过滤执行，名医当前窗口可能 0 复诊（实测丛东海：全表 113 条 / 窗口内 0 条 → 界面筛出 0 人属正常）。对账方法：
+- `include_stopped=1&doctor=丛东海` → 停服记录不限窗口，可筛出 67 人验证过滤本身生效；
+- SQL 交叉验证窗口内记录数：`COUNT(*) FILTER (WHERE is_stopped=false AND fu3_planned_end>=本月1 AND fu1_planned_start<=下月15)`。
+
+**patch 工具坑（函数头被吞）**：在已有函数前插入新函数时，若 old_string 包含紧随其后的函数签名行，new_string **必须完整重发射该签名**，否则签名被吞 → `SyntaxError: Unexpected token 'function'`（node --check 即时报，修复 = 补回签名两行）。
+
 ## 筛选栏 UI 标准（2026-08-15 主人明确，全系统 PC 页面通用）
+
 
 主人对 PC 页面筛选栏有统一审美标准，改任何页面的筛选区（复诊/领取记录等）直接照此执行，**不要自己另定宽度/布局**：
 
 - **宽度统一 145px**：所有筛选控件（输入框/下拉框/搜索按钮）`style="width:145px;"`，以开始日期框为标准。
 - **布局**：`<div class="row g-2 align-items-center">` + 每控件包 `<div class="col-auto">`（**不要用 `col-md-3` 响应式栅格**——领取记录页原来是它，主人嫌宽度不齐）。
 - **样式类**：`form-control form-control-sm` / `form-select form-select-sm` / `btn btn-primary btn-sm`。
-- **控件顺序**（复诊页最终版）：开始日期 → 结束日期 → 患者姓名 → 复诊状态 → 医助 → 包含停服 → 搜索按钮。
+- **控件顺序**（复诊页 2026-09-03 版）：开始日期 → 结束日期 → 患者姓名 → 复诊状态 → 医生 → 医助 → 包含停服 → 搜索按钮。（2026-09-03 加「医生」下拉，放医助前，与表格列序 医生→医助 一致）
 - **已按此标准改造的页面**：复诊管理（followup.html，2026-08-15）、膏方领取记录（prescriptions.html，2026-08-15，8 个控件含搜索按钮全 145px）。
 - 纯改模板 HTML 实时生效（Flask 模板每次请求渲染），无需重启 gunicorn；但 **Nginx /static/ 7d immutable 缓存 → 提醒主人 Ctrl+F5 强刷**。
 
