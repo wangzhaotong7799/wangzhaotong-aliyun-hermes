@@ -85,13 +85,18 @@ metadata:
 5. **JS 渲染** `static/js/page-followup.js`：渲染行 `<td>` + **colCount 硬编码 5 处同步 +1**（`? 15 : 13` 之类，按角色敏感列差异）。
 6. **导出** `exportFollowUpData()`：加列 + 顺序重排（见下）。
 
-## 在服/停药患者明细页面（2026-08-13 新增，独立页面）
+## 在服/停服/停药患者明细页面（2026-08-13 起；2026-09-04 加「停服」页）
 
-两个独立 PC 页面：**在服患者明细**（`active-patients`）、**停药患者明细**（`stopped-patients`）。列：患者姓名→性别→年龄→电话→处方类型*→数量→医生*→医助→领取时间→停服时间→停药时间（* 权限列）。
+三个独立 PC 页面：**在服患者明细**（`active-patients`，ap- 前缀）、**停服患者明细**（`expired-patients`，ep- 前缀，2026-09-04 新增）、**停药患者明细**（`stopped-patients`，sp- 前缀）。列：患者姓名→性别→年龄→电话→处方类型*→数量→医生*→医助→领取时间→停服时间→停药时间（* 权限列）。导航顺序 = 在服→停服→停药（主人心智递进：正在吃→吃完待归档→已归档）。合计卡配色区分：在服蓝 `#0d6efd/#e7f1ff`、停服橙 `#fd7e14/#fff4e6`、停药红 `#dc3545/#fdecea`。
 
 **后端接口**（follow_up_management.py）：
-- `GET /api/follow-up/patients?type=active|stopped&patient_name=&assistant=&doctor=&page=&page_size=` — 按患者去重取**最近疗程**（`max(recs, key=lambda r: (r.end_date or date.min, r.month or date.min))`）；`stop_time=end_date`、`drug_stop_time=end_date+40`；排序：在服按 stop_time 升序（先停药优先）、停药按 drug_stop_time 降序（最近停药优先）；返回分页 `{data,total,...}`。
-- **在服口径必须与统计概览一致**：`type=active` 过滤 `is_stopped=False AND end_date >= date.today()`。曾因明细页只过滤 `is_stopped=False` 导致 415 vs 统计概览 322 不一致（多出的是「药已吃完、还没到 40 天自动停服」的 98 人）。主人报「统计概览和卡片数量不一致」时先查这个。
+- `GET /api/follow-up/patients?type=active|expired|stopped&patient_name=&assistant=&doctor=&page=&page_size=` — 按患者去重取**最近疗程**（`max(recs, key=lambda r: (r.end_date or date.min, r.month or date.min))`）；`stop_time=end_date`、`drug_stop_time=end_date+40`；排序：在服/停服按 stop_time 升序（先到期/先归档优先）、停药按 drug_stop_time 降序（最近停药优先）；返回分页 `{data,total,...}`。
+- **三口径互斥且互补全覆盖**（2026-09-04 明确）：
+  - `type=active` 在服 = `is_stopped=False AND end_date >= today`
+  - `type=expired` 停服过渡 = `is_stopped=False AND end_date < today` —— 药已吃完、等 40 天观察期结束自动归档
+  - `type=stopped` 停药归档 = `is_stopped=True`（当前全为自动归档：`stopped_at=end_date+40`）
+- ⚠️ **历史坑「三不沾」**：过渡态患者（魏淑芳案例 2026-09-04：end_date=8-16 已过、is_stopped=false、自动归档日 9-25）曾**任何列表都不显示**——复诊列表默认窗口过滤看不到、在服页(end_date<today)看不到、停药页(is_stopped=false)看不到。主人问「在服没有？停服也没有？」正是此缺口，触发新增 `type=expired` + 停服明细页。曾因明细页只过滤 `is_stopped=False` 导致 415 vs 统计概览 322 不一致，多出者正是这批过渡态患者。
+- **新增同款明细页 = 复制「停药页」三件套改前缀**：模板/JS 全 ID `sp-`→`ep-`、`type='stopped'`→`type='expired'`、文案「停药」→「停服」；后端照抄 filter 分支改条件。懒加载路由 `/page/<page_name>` 与 `/static/js/page-<page_name>.js?v=` 自动生效（common.js 注入无需改），但 **common.js 权限门控 5 处**（1 变量声明 + canManage/领导层/canSeeFollowup 的 showNav + canSeeFollowup else 的 hideNav + 未登录 hideNav）和 **index.html 2 处**（nav `<li id="xxx-nav">` + `<div id="page-xxx">`）必须手动加。改后验证：`node --check` + 测试客户端三 type total 与 SQL 口径一致 + 模板/JS/API HTTP 200 + 模板与 JS 的 ID 前缀逐一对应（ep- 17 个）。备份参考 `backups/stop_patients_page_20260904_104950/`。
 - 必须 `_mask_sensitive_fields(d)`：无权限时 `prescription_type`/`doctor` 置 None（`can_view_field`，与 followup 页面只用单个 flag 不同，明细页医生列用 `doctor:view` 权限点）。
 - `GET /api/follow-up/doctors` — 医生下拉数据源：可见范围内 `DISTINCT doctor` 排序返回。**别学 prescriptions 页从当前页记录提取**（只含当前页 50 条，下拉不全）。
 
